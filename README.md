@@ -6,7 +6,7 @@ A DAW-style editor for the Commodore 64 SID chip.
 
 - DAW UI: arrangement timeline, piano roll, per-voice panels
 - 3 SID voices (lead / bass / harmony) with waveform, ADSR, PW, ring mod, sync
-- Envelope editor — draw volume envelopes by hand (FamiStudio-style) or use ADSR sliders
+- Envelope editor — draw volume envelopes by hand or use ADSR sliders
 - MIDI import (.mid) with 3-voice auto-assignment
 - Live MIDI recording via RtMidi
 - Undo/Redo for all edits
