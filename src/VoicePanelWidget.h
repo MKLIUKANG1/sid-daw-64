@@ -18,6 +18,7 @@ public:
     explicit VoicePanelWidget(QWidget *parent = nullptr);
 
     void setPattern(Pattern *pat, int voiceIndex);
+    void setVoiceParams(VoiceParams *vp);
     void setUndoStack(QUndoStack *s) { m_undoStack = s; }
 
 signals:
@@ -28,17 +29,19 @@ private slots:
     void onSavePreset();
     void onLoadPreset();
     void onEnvelopeChanged();
-    void onClearEnvelope();
+    void onClearEnvelope(int which);
 
 private:
     void refreshFromModel();
+    VoiceParams *currentParams() const;
+    void wireEnvelope(EnvelopeEditorWidget *ed, int which);
 
     Pattern             *m_pattern    = nullptr;
+    VoiceParams         *m_vp         = nullptr;
     QUndoStack          *m_undoStack  = nullptr;
     int                  m_voiceIndex = 0;
     bool                 m_updating   = false;
 
-    // Снимок VoiceParams на момент начала редактирования огибающей
     VoiceParams          m_oldVPBeforeEdit;
     bool                 m_hasOldVP = false;
 
@@ -56,8 +59,10 @@ private:
     QSlider            *m_volume     = nullptr;
     QSlider            *m_pan        = nullptr;
 
-    QTabWidget             *m_tabs           = nullptr;
-    EnvelopeEditorWidget   *m_envelopeEditor = nullptr;
-    QSpinBox               *m_envSpeed       = nullptr;
-    QPushButton            *m_envClearBtn    = nullptr;
+    QTabWidget             *m_tabs      = nullptr;
+    EnvelopeEditorWidget   *m_envVolume = nullptr;
+    EnvelopeEditorWidget   *m_envPitch  = nullptr;
+    EnvelopeEditorWidget   *m_envDuty   = nullptr;
+    EnvelopeEditorWidget   *m_envArp    = nullptr;
+    QSpinBox               *m_envSpeed  = nullptr;
 };

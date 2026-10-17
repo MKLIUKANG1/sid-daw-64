@@ -10,6 +10,7 @@ struct Note {
     int length   = 4;
     int velocity = 12;
     int voice    = 0;
+    int instrumentIndex = -1;
 };
 
 struct VoiceParams {
@@ -24,10 +25,18 @@ struct VoiceParams {
     float volume    = 1.0f;
     float pan       = 0.0f;
 
-    // Огибающая громкости (0..15). Пусто = использовать ADSR.
-    QVector<int> volumeEnvelope;
-    // Кол-во точек огибающей, проигрываемых за один тик
+    // Огибающие, 0..15
+    QVector<int> volumeEnvelope;      // default 15
+    QVector<int> pitchEnvelope;       // default 8 (center = 0 semitones)
+    QVector<int> dutyEnvelope;        // default 8 (center = PW 2048)
+    QVector<int> arpeggioEnvelope;    // default 0 (no shift)
+
     int envelopeSpeed = 4;
+};
+
+struct Instrument {
+    QString name = "Instrument";
+    VoiceParams params;
 };
 
 struct Pattern {
@@ -46,6 +55,7 @@ struct Clip {
 
 struct Project {
     std::vector<std::unique_ptr<Pattern>> patterns;
+    std::vector<std::unique_ptr<Instrument>> instruments;
     QVector<Clip> clips;
     int trackCount = 4;
     int totalTicks = 256;

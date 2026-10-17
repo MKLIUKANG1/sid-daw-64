@@ -18,8 +18,10 @@ public:
     int  zoom() const { return m_tickWidth; }
 
 signals:
+    void addPatternRequested(int track, int startTick);
     void projectChanged();
     void seekRequested(double tick);
+    void panBy(int dx, int dy);
 
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -51,6 +53,9 @@ private:
     int         m_activePattern  = 0;
     double      m_playheadTick   = 0.0;
     int         m_tickWidth      = 4;
+
+    bool   m_panning  = false;
+    QPoint m_panStart;
 
     int    m_dragIndex   = -1;
     bool   m_dragResize  = false;

@@ -6,6 +6,17 @@
 
 namespace {
 
+QJsonArray vecToJson(const QVector<int> &v) {
+    QJsonArray a;
+    for (int x : v) a.append(x);
+    return a;
+}
+QVector<int> jsonToVec(const QJsonArray &a) {
+    QVector<int> v;
+    for (const auto &x : a) v.append(x.toInt());
+    return v;
+}
+
 QJsonObject voiceToJson(const VoiceParams &vp) {
     QJsonObject o;
     o["waveform"]   = vp.waveform;
@@ -19,10 +30,10 @@ QJsonObject voiceToJson(const VoiceParams &vp) {
     o["volume"]     = double(vp.volume);
     o["pan"]        = double(vp.pan);
     o["envelopeSpeed"] = vp.envelopeSpeed;
-
-    QJsonArray envArr;
-    for (int v : vp.volumeEnvelope) envArr.append(v);
-    o["volumeEnvelope"] = envArr;
+    o["volumeEnvelope"]   = vecToJson(vp.volumeEnvelope);
+    o["pitchEnvelope"]    = vecToJson(vp.pitchEnvelope);
+    o["dutyEnvelope"]     = vecToJson(vp.dutyEnvelope);
+    o["arpeggioEnvelope"] = vecToJson(vp.arpeggioEnvelope);
     return o;
 }
 
@@ -39,9 +50,10 @@ VoiceParams voiceFromJson(const QJsonObject &o) {
     vp.volume     = float(o.value("volume").toDouble(1.0));
     vp.pan        = float(o.value("pan").toDouble(0.0));
     vp.envelopeSpeed = o.value("envelopeSpeed").toInt(4);
-
-    for (const auto &val : o.value("volumeEnvelope").toArray())
-        vp.volumeEnvelope.append(val.toInt());
+    vp.volumeEnvelope   = jsonToVec(o.value("volumeEnvelope").toArray());
+    vp.pitchEnvelope    = jsonToVec(o.value("pitchEnvelope").toArray());
+    vp.dutyEnvelope     = jsonToVec(o.value("dutyEnvelope").toArray());
+    vp.arpeggioEnvelope = jsonToVec(o.value("arpeggioEnvelope").toArray());
     return vp;
 }
 
@@ -49,22 +61,17 @@ QJsonObject patternToJson(const Pattern &p) {
     QJsonObject o;
     o["name"]        = p.name;
     o["lengthTicks"] = p.lengthTicks;
-
     QJsonArray notes;
     for (const auto &n : p.notes) {
         QJsonObject no;
-        no["tick"]     = n.tick;
-        no["pitch"]    = n.pitch;
-        no["length"]   = n.length;
-        no["velocity"] = n.velocity;
-        no["voice"]    = n.voice;
+        no["tick"] = n.tick; no["pitch"] = n.pitch;
+        no["length"] = n.length; no["velocity"] = n.velocity;
+        no["voice"] = n.voice; no["instrumentIndex"] = n.instrumentIndex;
         notes.append(no);
     }
     o["notes"] = notes;
-
     QJsonArray voices;
-    for (int v = 0; v < 3; ++v)
-        voices.append(voiceToJson(p.voiceParams[v]));
+    for (int v = 0; v < 3; ++v) voices.append(voiceToJson(p.voiceParams[v]));
     o["voices"] = voices;
     return o;
 }
@@ -76,11 +83,12 @@ Pattern patternFromJson(const QJsonObject &o) {
     for (const auto &nv : o.value("notes").toArray()) {
         QJsonObject no = nv.toObject();
         Note n;
-        n.tick     = no.value("tick").toInt();
-        n.pitch    = no.value("pitch").toInt(60);
-        n.length   = no.value("length").toInt(4);
+        n.tick = no.value("tick").toInt();
+        n.pitch = no.value("pitch").toInt(60);
+        n.length = no.value("length").toInt(4);
         n.velocity = no.value("velocity").toInt(12);
-        n.voice    = no.value("voice").toInt(0);
+        n.voice = no.value("voice").toInt(0);
+        n.instrumentIndex = no.value("instrumentIndex").toInt(-1);
         p.notes.append(n);
     }
     QJsonArray voices = o.value("voices").toArray();
@@ -94,21 +102,29 @@ Pattern patternFromJson(const QJsonObject &o) {
 QString ProjectIO::save(const Project &project, int bpm, const QString &path) {
     QJsonObject root;
     root["format"] = "SidDAW-project";
-    root["version"] = 1;
+    root["version"] = 3;
     root["bpm"] = bpm;
 
     QJsonArray patterns;
-    for (const auto &p : project.patterns)
-        patterns.append(patternToJson(*p));
+    for (const auto &p : project.patterns) patterns.append(patternToJson(*p));
     root["patterns"] = patterns;
+
+    QJsonArray instruments;
+    for (const auto &instr : project.instruments) {
+        QJsonObject io;
+        io["name"]   = instr->name;
+        io["params"] = voiceToJson(instr->params);
+        instruments.append(io);
+    }
+    root["instruments"] = instruments;
 
     QJsonArray clips;
     for (const auto &c : project.clips) {
         QJsonObject co;
         co["patternIndex"] = c.patternIndex;
-        co["track"]        = c.track;
-        co["startTick"]    = c.startTick;
-        co["lengthTicks"]  = c.lengthTicks;
+        co["track"] = c.track;
+        co["startTick"] = c.startTick;
+        co["lengthTicks"] = c.lengthTicks;
         clips.append(co);
     }
     root["clips"] = clips;
@@ -116,8 +132,7 @@ QString ProjectIO::save(const Project &project, int bpm, const QString &path) {
     root["totalTicks"] = project.totalTicks;
 
     QFile f(path);
-    if (!f.open(QIODevice::WriteOnly))
-        return "Cannot open for write: " + path;
+    if (!f.open(QIODevice::WriteOnly)) return "Cannot open for write: " + path;
     f.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
     f.close();
     return {};
@@ -125,17 +140,14 @@ QString ProjectIO::save(const Project &project, int bpm, const QString &path) {
 
 QString ProjectIO::load(Project &project, int &bpm, const QString &path) {
     QFile f(path);
-    if (!f.open(QIODevice::ReadOnly))
-        return "Cannot open: " + path;
+    if (!f.open(QIODevice::ReadOnly)) return "Cannot open: " + path;
     QByteArray data = f.readAll();
     f.close();
 
     QJsonParseError err{};
     QJsonDocument doc = QJsonDocument::fromJson(data, &err);
-    if (err.error != QJsonParseError::NoError)
-        return "JSON parse error: " + err.errorString();
-    if (!doc.isObject())
-        return "Root is not an object";
+    if (err.error != QJsonParseError::NoError) return "JSON parse error: " + err.errorString();
+    if (!doc.isObject()) return "Root is not an object";
     QJsonObject root = doc.object();
     if (root.value("format").toString() != "SidDAW-project")
         return "Not a SidDAW project file";
@@ -150,16 +162,23 @@ QString ProjectIO::load(Project &project, int &bpm, const QString &path) {
         auto p = std::make_unique<Pattern>(patternFromJson(pv.toObject()));
         fresh.patterns.push_back(std::move(p));
     }
-    if (fresh.patterns.empty())
-        return "Project has no patterns";
+    if (fresh.patterns.empty()) return "Project has no patterns";
+
+    for (const auto &iv : root.value("instruments").toArray()) {
+        QJsonObject io = iv.toObject();
+        auto instr = std::make_unique<Instrument>();
+        instr->name = io.value("name").toString("Instrument");
+        instr->params = voiceFromJson(io.value("params").toObject());
+        fresh.instruments.push_back(std::move(instr));
+    }
 
     for (const auto &cv : root.value("clips").toArray()) {
         QJsonObject co = cv.toObject();
         Clip c;
         c.patternIndex = co.value("patternIndex").toInt(0);
-        c.track        = co.value("track").toInt(0);
-        c.startTick    = co.value("startTick").toInt(0);
-        c.lengthTicks  = co.value("lengthTicks").toInt(64);
+        c.track = co.value("track").toInt(0);
+        c.startTick = co.value("startTick").toInt(0);
+        c.lengthTicks = co.value("lengthTicks").toInt(64);
         fresh.clips.append(c);
     }
 

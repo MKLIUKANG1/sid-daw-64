@@ -1,6 +1,7 @@
 #pragma once
 #include <QString>
 #include <QVector>
+#include <QHash>
 #include "Model.h"
 
 struct RawNote {
@@ -11,16 +12,24 @@ struct RawNote {
     int channel  = 0;
 };
 
+struct ChannelInfo {
+    int channel   = 0;
+    int noteCount = 0;
+    int minPitch  = 127;
+    int maxPitch  = 0;
+};
+
 namespace MidiImporter {
 
-// Парсит .mid файл. Заполняет outBpm, outLengthTicks (в наших тиках,
-// 4 тика на четверть) и outNotes. Возвращает пустую строку при успехе.
 QString importFile(const QString &path,
                    int &outBpm,
                    int &outLengthTicks,
-                   QVector<RawNote> &outNotes);
+                   QVector<RawNote> &outNotes,
+                   QVector<ChannelInfo> &outChannels);
 
-// Раскладывает RawNote по трём голосам SID и заполняет Pattern.
-void assignToPattern(const QVector<RawNote> &rawNotes, Pattern &outPattern);
+void buildPatternFromSelection(const QVector<RawNote> &rawNotes,
+                               const QHash<int,int> &channelToVoice,
+                               Pattern &outPattern,
+                               const QHash<int,int> &channelToInstrument = {});
 
 } // namespace MidiImporter

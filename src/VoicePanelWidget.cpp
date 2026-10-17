@@ -34,7 +34,7 @@ VoicePanelWidget::VoicePanelWidget(QWidget *parent) : QWidget(parent) {
 
     m_tabs = new QTabWidget;
 
-    // ===== Sliders tab =====
+    // --- Sliders tab ---
     auto *slidersTab = new QWidget;
     auto *slidersLayout = new QVBoxLayout(slidersTab);
     slidersLayout->setContentsMargins(4, 4, 4, 4);
@@ -108,32 +108,33 @@ VoicePanelWidget::VoicePanelWidget(QWidget *parent) : QWidget(parent) {
 
     m_tabs->addTab(slidersTab, "Sliders");
 
-    // ===== Envelope tab =====
-    auto *envTab = new QWidget;
-    auto *envLayout = new QVBoxLayout(envTab);
-    envLayout->setContentsMargins(4, 4, 4, 4);
-    envLayout->setSpacing(4);
+    // --- Envelope tabs ---
+    m_envVolume = new EnvelopeEditorWidget;
+    m_envPitch  = new EnvelopeEditorWidget;
+    m_envDuty   = new EnvelopeEditorWidget;
+    m_envArp    = new EnvelopeEditorWidget;
 
-    m_envelopeEditor = new EnvelopeEditorWidget;
-    envLayout->addWidget(m_envelopeEditor, 1);
-
-    auto *envCtl = new QHBoxLayout;
-    envCtl->addWidget(new QLabel("Speed:"));
-    m_envSpeed = new QSpinBox;
-    m_envSpeed->setRange(1, 16);
-    m_envSpeed->setValue(4);
-    m_envSpeed->setToolTip("Points per tick");
-    envCtl->addWidget(m_envSpeed);
-    envCtl->addStretch();
-    m_envClearBtn = new QPushButton("Clear");
-    envCtl->addWidget(m_envClearBtn);
-    envLayout->addLayout(envCtl);
-
-    m_tabs->addTab(envTab, "Envelope");
+    m_tabs->addTab(m_envVolume, "Volume");
+    m_tabs->addTab(m_envPitch,  "Pitch");
+    m_tabs->addTab(m_envDuty,   "Duty");
+    m_tabs->addTab(m_envArp,    "Arp");
 
     root->addWidget(m_tabs, 1);
 
-    // ---- connections: sliders ----
+    // Speed / Clear row
+    auto *ctlRow = new QHBoxLayout;
+    ctlRow->addWidget(new QLabel("Speed:"));
+    m_envSpeed = new QSpinBox;
+    m_envSpeed->setRange(1, 16);
+    m_envSpeed->setValue(4);
+    m_envSpeed->setToolTip("Envelope points per tick");
+    ctlRow->addWidget(m_envSpeed);
+    ctlRow->addStretch();
+    auto *clearBtn = new QPushButton("Clear Current");
+    ctlRow->addWidget(clearBtn);
+    root->addLayout(ctlRow);
+
+    // connections: sliders
     connect(m_waveform, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &VoicePanelWidget::onAnyChange);
     connect(m_pulseW, &QSlider::valueChanged, this, [this](int v) {
@@ -148,139 +149,158 @@ VoicePanelWidget::VoicePanelWidget(QWidget *parent) : QWidget(parent) {
     connect(m_sync,    &QCheckBox::toggled, this, &VoicePanelWidget::onAnyChange);
     connect(m_volume,  &QSlider::valueChanged, this, &VoicePanelWidget::onAnyChange);
     connect(m_pan,     &QSlider::valueChanged, this, &VoicePanelWidget::onAnyChange);
+    connect(m_envSpeed, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &VoicePanelWidget::onAnyChange);
     connect(m_saveBtn, &QPushButton::clicked, this, &VoicePanelWidget::onSavePreset);
     connect(m_loadBtn, &QPushButton::clicked, this, &VoicePanelWidget::onLoadPreset);
 
-    // ---- connections: envelope ----
-    connect(m_envelopeEditor, &EnvelopeEditorWidget::envelopeChanged,
-            this, &VoicePanelWidget::onEnvelopeChanged);
-    connect(m_envelopeEditor, &EnvelopeEditorWidget::envelopeChangeStarted,
-            this, [this]() {
-        if (m_pattern) {
-            m_oldVPBeforeEdit = m_pattern->voiceParams[m_voiceIndex];
-            m_hasOldVP = true;
-        }
+    // envelope connections
+    wireEnvelope(m_envVolume, 0);
+    wireEnvelope(m_envPitch,  1);
+    wireEnvelope(m_envDuty,   2);
+    wireEnvelope(m_envArp,    3);
+
+    connect(clearBtn, &QPushButton::clicked, this, [this]() {
+        int which = m_tabs->currentIndex() - 1;   // 0=Volume, 1=Pitch, 2=Duty, 3=Arp
+        if (which >= 0 && which < 4) onClearEnvelope(which);
     });
-    connect(m_envelopeEditor, &EnvelopeEditorWidget::envelopeChangeFinished,
+}
+
+void VoicePanelWidget::wireEnvelope(EnvelopeEditorWidget *ed, int which) {
+    connect(ed, &EnvelopeEditorWidget::envelopeChanged,
+            this, &VoicePanelWidget::onEnvelopeChanged);
+    connect(ed, &EnvelopeEditorWidget::envelopeChangeStarted,
             this, [this]() {
-        if (!m_pattern || !m_undoStack || !m_hasOldVP) return;
+        VoiceParams *vp = currentParams();
+        if (vp) { m_oldVPBeforeEdit = *vp; m_hasOldVP = true; }
+    });
+    connect(ed, &EnvelopeEditorWidget::envelopeChangeFinished,
+            this, [this]() {
+        VoiceParams *vp = currentParams();
+        if (!vp || !m_hasOldVP) return;
         m_hasOldVP = false;
-        m_undoStack->push(new ChangeVoiceParamCommand(
-            m_pattern, m_voiceIndex,
-            m_oldVPBeforeEdit,
-            m_pattern->voiceParams[m_voiceIndex]));
+        if (m_pattern && m_undoStack)
+            m_undoStack->push(new ChangeVoiceParamCommand(
+                m_pattern, m_voiceIndex, m_oldVPBeforeEdit, *vp));
         emit paramsChanged();
     });
-    connect(m_envSpeed, QOverload<int>::of(&QSpinBox::valueChanged),
-            this, &VoicePanelWidget::onAnyChange);
-    connect(m_envClearBtn, &QPushButton::clicked,
-            this, &VoicePanelWidget::onClearEnvelope);
+    Q_UNUSED(which);
+}
+
+VoiceParams *VoicePanelWidget::currentParams() const {
+    if (m_vp) return m_vp;
+    if (m_pattern) return const_cast<VoiceParams*>(&m_pattern->voiceParams[m_voiceIndex]);
+    return nullptr;
 }
 
 void VoicePanelWidget::setPattern(Pattern *pat, int voiceIndex) {
-    m_pattern    = pat;
+    m_pattern = pat;
+    m_vp = nullptr;
     m_voiceIndex = voiceIndex;
     refreshFromModel();
 }
 
-void VoicePanelWidget::refreshFromModel() {
-    if (!m_pattern) return;
-    m_updating = true;
-    const VoiceParams &vp = m_pattern->voiceParams[m_voiceIndex];
-    m_waveform->setCurrentIndex(vp.waveform);
-    m_pulseW->setValue(vp.pulseWidth);
-    m_pulseWLab->setText(QString::number(vp.pulseWidth));
-    m_attack->setValue(vp.attack);
-    m_decay->setValue(vp.decay);
-    m_sustain->setValue(vp.sustain);
-    m_release->setValue(vp.release);
-    m_ring->setChecked(vp.ringMod);
-    m_sync->setChecked(vp.sync);
-    m_volume->setValue(int(vp.volume * 100.0f));
-    m_pan->setValue(int(vp.pan * 50.0f) + 50);
-    m_envSpeed->setValue(vp.envelopeSpeed);
+void VoicePanelWidget::setVoiceParams(VoiceParams *vp) {
+    m_vp = vp;
+    m_pattern = nullptr;
+    m_voiceIndex = 0;
+    refreshFromModel();
+}
 
-    // Обновляем указатель на огибающую и перерисовываем
-    m_envelopeEditor->setEnvelope(
-        const_cast<QVector<int>*>(&vp.volumeEnvelope), 15);
+void VoicePanelWidget::refreshFromModel() {
+    VoiceParams *vp = currentParams();
+    if (!vp) return;
+    m_updating = true;
+    m_waveform->setCurrentIndex(vp->waveform);
+    m_pulseW->setValue(vp->pulseWidth);
+    m_pulseWLab->setText(QString::number(vp->pulseWidth));
+    m_attack->setValue(vp->attack);
+    m_decay->setValue(vp->decay);
+    m_sustain->setValue(vp->sustain);
+    m_release->setValue(vp->release);
+    m_ring->setChecked(vp->ringMod);
+    m_sync->setChecked(vp->sync);
+    m_volume->setValue(int(vp->volume * 100.0f));
+    m_pan->setValue(int(vp->pan * 50.0f) + 50);
+    m_envSpeed->setValue(vp->envelopeSpeed);
+
+    m_envVolume->setEnvelope(&vp->volumeEnvelope,   15, 15, false);
+    m_envPitch ->setEnvelope(&vp->pitchEnvelope,    15,  8, true);
+    m_envDuty  ->setEnvelope(&vp->dutyEnvelope,     15,  8, true);
+    m_envArp   ->setEnvelope(&vp->arpeggioEnvelope, 15,  0, false);
 
     m_updating = false;
 }
 
 void VoicePanelWidget::onAnyChange() {
-    if (m_updating || !m_pattern) return;
-    VoiceParams oldVP = m_pattern->voiceParams[m_voiceIndex];
-    VoiceParams &vp = m_pattern->voiceParams[m_voiceIndex];
-    vp.waveform   = m_waveform->currentIndex();
-    vp.pulseWidth = m_pulseW->value();
-    vp.attack     = m_attack->value();
-    vp.decay      = m_decay->value();
-    vp.sustain    = m_sustain->value();
-    vp.release    = m_release->value();
-    vp.ringMod    = m_ring->isChecked();
-    vp.sync       = m_sync->isChecked();
-    vp.volume     = m_volume->value() / 100.0f;
-    vp.pan        = (m_pan->value() - 50) / 50.0f;
-    vp.envelopeSpeed = m_envSpeed->value();
+    if (m_updating) return;
+    VoiceParams *vp = currentParams();
+    if (!vp) return;
 
-    if (m_undoStack)
+    VoiceParams oldVP = *vp;
+    vp->waveform   = m_waveform->currentIndex();
+    vp->pulseWidth = m_pulseW->value();
+    vp->attack     = m_attack->value();
+    vp->decay      = m_decay->value();
+    vp->sustain    = m_sustain->value();
+    vp->release    = m_release->value();
+    vp->ringMod    = m_ring->isChecked();
+    vp->sync       = m_sync->isChecked();
+    vp->volume     = m_volume->value() / 100.0f;
+    vp->pan        = (m_pan->value() - 50) / 50.0f;
+    vp->envelopeSpeed = m_envSpeed->value();
+
+    if (m_pattern && m_undoStack)
         m_undoStack->push(new ChangeVoiceParamCommand(
-            m_pattern, m_voiceIndex, oldVP, vp));
-
+            m_pattern, m_voiceIndex, oldVP, *vp));
     emit paramsChanged();
 }
 
 void VoicePanelWidget::onEnvelopeChanged() {
-    // Только визуальная перерисовка уже сделана внутри Editor;
-    // здесь сообщаем наружу, что модель могла измениться
     emit paramsChanged();
 }
 
-void VoicePanelWidget::onClearEnvelope() {
-    if (!m_pattern) return;
-    VoiceParams oldVP = m_pattern->voiceParams[m_voiceIndex];
-    m_pattern->voiceParams[m_voiceIndex].volumeEnvelope.clear();
-    m_envelopeEditor->setEnvelope(
-        &m_pattern->voiceParams[m_voiceIndex].volumeEnvelope, 15);
-    if (m_undoStack)
+void VoicePanelWidget::onClearEnvelope(int which) {
+    VoiceParams *vp = currentParams();
+    if (!vp) return;
+    VoiceParams oldVP = *vp;
+    switch (which) {
+        case 0: vp->volumeEnvelope.clear();   m_envVolume->setEnvelope(&vp->volumeEnvelope,   15, 15, false); break;
+        case 1: vp->pitchEnvelope.clear();    m_envPitch ->setEnvelope(&vp->pitchEnvelope,    15,  8, true);  break;
+        case 2: vp->dutyEnvelope.clear();     m_envDuty  ->setEnvelope(&vp->dutyEnvelope,     15,  8, true);  break;
+        case 3: vp->arpeggioEnvelope.clear(); m_envArp   ->setEnvelope(&vp->arpeggioEnvelope, 15,  0, false); break;
+    }
+    if (m_pattern && m_undoStack)
         m_undoStack->push(new ChangeVoiceParamCommand(
-            m_pattern, m_voiceIndex,
-            oldVP, m_pattern->voiceParams[m_voiceIndex]));
+            m_pattern, m_voiceIndex, oldVP, *vp));
     emit paramsChanged();
 }
 
 void VoicePanelWidget::onSavePreset() {
-    if (!m_pattern) return;
-    QString path = QFileDialog::getSaveFileName(
-        this, "Save Voice Preset",
-        QDir::homePath() + "/voice_preset.json",
-        "Voice preset (*.json)");
+    VoiceParams *vp = currentParams();
+    if (!vp) return;
+    QString path = QFileDialog::getSaveFileName(this, "Save Voice Preset",
+        QDir::homePath() + "/voice_preset.json", "Voice preset (*.json)");
     if (path.isEmpty()) return;
     if (!path.endsWith(".json", Qt::CaseInsensitive)) path += ".json";
-
-    QString err = VoicePresetIO::save(m_pattern->voiceParams[m_voiceIndex], path);
-    if (!err.isEmpty())
-        QMessageBox::warning(this, "Save failed", err);
+    QString err = VoicePresetIO::save(*vp, path);
+    if (!err.isEmpty()) QMessageBox::warning(this, "Save failed", err);
 }
 
 void VoicePanelWidget::onLoadPreset() {
-    if (!m_pattern) return;
-    QString path = QFileDialog::getOpenFileName(
-        this, "Load Voice Preset", QDir::homePath(),
-        "Voice preset (*.json)");
+    VoiceParams *vp = currentParams();
+    if (!vp) return;
+    QString path = QFileDialog::getOpenFileName(this, "Load Voice Preset",
+        QDir::homePath(), "Voice preset (*.json)");
     if (path.isEmpty()) return;
-
-    VoiceParams oldVP = m_pattern->voiceParams[m_voiceIndex];
-    VoiceParams vp = oldVP;
-    QString err = VoicePresetIO::load(vp, path);
-    if (!err.isEmpty()) {
-        QMessageBox::warning(this, "Load failed", err);
-        return;
-    }
-    m_pattern->voiceParams[m_voiceIndex] = vp;
+    VoiceParams oldVP = *vp;
+    VoiceParams loaded = oldVP;
+    QString err = VoicePresetIO::load(loaded, path);
+    if (!err.isEmpty()) { QMessageBox::warning(this, "Load failed", err); return; }
+    *vp = loaded;
     refreshFromModel();
-    if (m_undoStack)
+    if (m_pattern && m_undoStack)
         m_undoStack->push(new ChangeVoiceParamCommand(
-            m_pattern, m_voiceIndex, oldVP, vp));
+            m_pattern, m_voiceIndex, oldVP, *vp));
     emit paramsChanged();
 }

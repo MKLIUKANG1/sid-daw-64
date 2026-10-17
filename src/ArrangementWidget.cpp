@@ -7,6 +7,7 @@
 #include <QPolygon>
 #include <QFont>
 #include <algorithm>
+#include <QMenu>
 
 ArrangementWidget::ArrangementWidget(QWidget *parent) : QWidget(parent) {
     setMouseTracking(true);
@@ -103,6 +104,7 @@ void ArrangementWidget::paintEvent(QPaintEvent *) {
         int w = c.lengthTicks * tw;
         int y = trackToY(c.track) + 3;
         int h = th - 6;
+        if (w < 4) w = 4;
 
         QColor base;
         switch (c.patternIndex % 5) {
@@ -113,16 +115,83 @@ void ArrangementWidget::paintEvent(QPaintEvent *) {
             default:base = QColor( 90, 200, 200); break;
         }
         if (c.patternIndex == m_activePattern) base = base.lighter(112);
-        QRect r(x, y, qMax(4, w), h);
+        QRect r(x, y, w, h);
         p.setBrush(base);
         p.setPen(base.darker(170));
         p.drawRoundedRect(r, 4, 4);
 
+        // --- Note preview ---
+        if (c.patternIndex >= 0 && c.patternIndex < (int)m_project->patterns.size()) {
+            const Pattern *pat = m_project->patterns[c.patternIndex].get();
+            if (pat && pat->lengthTicks > 0 && !pat->notes.isEmpty()) {
+                // Определяем диапазон высот в паттерне
+                int minP = 127, maxP = 0;
+                for (const auto &n : pat->notes) {
+                    if (n.pitch < minP) minP = n.pitch;
+                    if (n.pitch > maxP) maxP = n.pitch;
+                }
+                if (maxP - minP < 12) {
+                    int pad = (12 - (maxP - minP)) / 2 + 1;
+                    minP -= pad; maxP += pad;
+                }
+                int pitchRange = qMax(1, maxP - minP);
+
+                // Превью занимает нижние 55% клипа, имя — сверху
+                int previewTop = y + int(h * 0.38);
+                int previewH   = h - (previewTop - y) - 3;
+
+                p.save();
+                p.setClipRect(r.adjusted(1, 1, -1, -1));
+
+                int reps        = (c.lengthTicks + pat->lengthTicks - 1) / pat->lengthTicks;
+                int clipEndTick = c.startTick + c.lengthTicks;
+
+                for (int rep = 0; rep < reps; ++rep) {
+                    for (const auto &n : pat->notes) {
+                        int absTick = c.startTick + rep * pat->lengthTicks + n.tick;
+                        if (absTick >= clipEndTick) continue;
+
+                        int nx  = tickToX(absTick);
+                        int nxe = tickToX(absTick + n.length);
+                        if (nxe > x + w) nxe = x + w;
+                        int nw  = nxe - nx;
+                        if (nw < 1) nw = 1;
+
+                        int ny = previewTop +
+                                 int((1.0 - double(n.pitch - minP) / double(pitchRange))
+                                     * double(previewH - 2));
+
+                        QColor nc;
+                        if (n.instrumentIndex >= 0 &&
+                            n.instrumentIndex < (int)m_project->instruments.size()) {
+                            static const QColor palette[8] = {
+                                QColor(150, 200, 255), QColor(160, 240, 160),
+                                QColor(255, 200, 130), QColor(240, 180, 240),
+                                QColor(160, 240, 240), QColor(255, 240, 160),
+                                QColor(220, 180, 255), QColor(190, 230, 170),
+                            };
+                            nc = palette[n.instrumentIndex % 8];
+                        } else {
+                            switch (n.voice) {
+                                case 0: nc = QColor(200, 220, 255); break;
+                                case 1: nc = QColor(200, 255, 200); break;
+                                default:nc = QColor(255, 220, 180); break;
+                            }
+                        }
+                        p.fillRect(nx, ny, nw, 2, nc);
+                    }
+                }
+                p.restore();
+            }
+        }
+
+        // Имя поверх клипа
         p.setPen(Qt::white);
         QString name = (c.patternIndex < (int)m_project->patterns.size())
                          ? m_project->patterns[c.patternIndex]->name
                          : QString("?");
-        p.drawText(r.adjusted(6, 3, -4, -2), Qt::AlignLeft | Qt::AlignTop, name);
+        QRect textR = r.adjusted(6, 2, -4, -int(h * 0.5));
+        p.drawText(textR, Qt::AlignLeft | Qt::AlignTop, name);
     }
 
     int px = tickToX(int(m_playheadTick));
@@ -156,6 +225,15 @@ ArrangementWidget::Hit ArrangementWidget::hitTest(const QPoint &pos) const {
 
 void ArrangementWidget::mousePressEvent(QMouseEvent *e) {
     if (!m_project) return;
+
+    if (e->button() == Qt::MiddleButton) {
+        m_panning  = true;
+        m_panStart = e->pos();
+        setCursor(Qt::ClosedHandCursor);
+        e->accept();
+        return;
+    }
+
     const int lw = labelWidth();
 
     if (e->pos().y() < rulerHeight()) {
@@ -169,7 +247,7 @@ void ArrangementWidget::mousePressEvent(QMouseEvent *e) {
     }
     if (e->pos().x() < lw) return;
 
-    Hit h = hitTest(e->pos());
+        Hit h = hitTest(e->pos());
     if (e->button() == Qt::RightButton) {
         if (h.index >= 0) {
             if (m_undoStack)
@@ -178,6 +256,13 @@ void ArrangementWidget::mousePressEvent(QMouseEvent *e) {
                 m_project->clips.removeAt(h.index);
             update();
             emit projectChanged();
+        } else {
+            // ПКМ по пустому месту → "Добавить новый паттерн здесь"
+            int tr = yToTrack(e->pos().y());
+            int t  = qMax(0, xToTick(e->pos().x()));
+            t = (t / snapTicks()) * snapTicks();
+            if (tr >= 0 && tr < m_project->trackCount)
+                emit addPatternRequested(tr, t);
         }
         return;
     }
@@ -217,6 +302,12 @@ void ArrangementWidget::mousePressEvent(QMouseEvent *e) {
 }
 
 void ArrangementWidget::mouseMoveEvent(QMouseEvent *e) {
+    if (m_panning) {
+        QPoint delta = m_panStart - e->pos();
+        emit panBy(delta.x(), delta.y());
+        m_panStart = e->pos();
+        return;
+    }
     if (!m_dragging || !m_project || m_dragIndex < 0) return;
     auto &c = m_project->clips[m_dragIndex];
     int dx = e->pos().x() - m_dragStart.x();
@@ -239,7 +330,12 @@ void ArrangementWidget::mouseMoveEvent(QMouseEvent *e) {
     emit projectChanged();
 }
 
-void ArrangementWidget::mouseReleaseEvent(QMouseEvent *) {
+void ArrangementWidget::mouseReleaseEvent(QMouseEvent *e) {
+    if (m_panning && e->button() == Qt::MiddleButton) {
+        m_panning = false;
+        setCursor(Qt::ArrowCursor);
+        return;
+    }
     if (m_dragging && m_dragChanged && m_project &&
         m_dragIndex >= 0 && m_dragIndex < m_project->clips.size()) {
         Clip newC = m_project->clips[m_dragIndex];

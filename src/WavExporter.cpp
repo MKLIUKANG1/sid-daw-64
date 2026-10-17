@@ -83,6 +83,7 @@ QString WavExporter::exportProject(const Project &project,
     SidEngine sid;
     sid.setSampleRate(sampleRate);
     PatternPlayer player(&sid);
+    player.setProject(&project);
     player.setPattern(&tmp);
     player.setBpm(bpm);
 

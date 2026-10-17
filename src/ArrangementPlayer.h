@@ -32,9 +32,13 @@ private:
     struct VoiceState {
         bool active = false;
         int  pitch  = 60;
+        int  basePitch = 60;
         double endTick   = 0.0;
         double startTick = 0.0;
-        int    lastEnvIndex = -1;
+        int lastVolIdx = -1;
+        int lastPitchIdx = -1;
+        int lastDutyIdx = -1;
+        int lastArpIdx = -1;
         const VoiceParams *params = nullptr;
     };
 
@@ -43,6 +47,7 @@ private:
     void noteOn(const FlatNote &n);
     void noteOff(int voice);
     double noteFrequency(int midiPitch) const;
+    void writeFrequency(int voice, int basePitch, double semitoneShift);
 
     SidEngine         *m_sid = nullptr;
     const Project     *m_project = nullptr;

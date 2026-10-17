@@ -47,7 +47,13 @@ void ArrangementPlayer::rebuild() {
                 fn.pitch  = n.pitch;
                 fn.length = n.length;
                 fn.voice  = n.voice;
-                fn.params = &pat->voiceParams[std::clamp(n.voice, 0, 2)];
+
+                const VoiceParams *params = &pat->voiceParams[std::clamp(n.voice, 0, 2)];
+                if (n.instrumentIndex >= 0 &&
+                    n.instrumentIndex < (int)m_project->instruments.size()) {
+                    params = &m_project->instruments[n.instrumentIndex]->params;
+                }
+                fn.params = params;
 
                 int clipEnd = c.startTick + c.lengthTicks;
                 if (fn.tick >= clipEnd) continue;
@@ -65,17 +71,22 @@ void ArrangementPlayer::rebuild() {
     });
 }
 
+void ArrangementPlayer::writeFrequency(int voice, int basePitch, double semitoneShift) {
+    int base = voice * 7;
+    double f = noteFrequency(basePitch) * std::pow(2.0, semitoneShift / 12.0);
+    uint32_t freq = uint32_t(std::round(f * 16777216.0 / m_sid->clockFrequency()));
+    freq &= 0xFFFF;
+    m_sid->write(base + 0, freq & 0xFF);
+    m_sid->write(base + 1, (freq >> 8) & 0xFF);
+}
+
 void ArrangementPlayer::noteOn(const FlatNote &n) {
     int v = std::clamp(n.voice, 0, 2);
     int base = v * 7;
     const VoiceParams &vp = *n.params;
 
-    double f = noteFrequency(n.pitch);
-    uint32_t freq = uint32_t(std::round(f * 16777216.0 / m_sid->clockFrequency()));
-    freq &= 0xFFFF;
+    writeFrequency(v, n.pitch, 0.0);
 
-    m_sid->write(base + 0, freq & 0xFF);
-    m_sid->write(base + 1, (freq >> 8) & 0xFF);
     m_sid->write(base + 2, vp.pulseWidth & 0xFF);
     m_sid->write(base + 3, (vp.pulseWidth >> 8) & 0x0F);
 
@@ -83,22 +94,24 @@ void ArrangementPlayer::noteOn(const FlatNote &n) {
     int atk = useEnv ? 0 : (vp.attack & 0x0F);
     int dec = useEnv ? 0 : (vp.decay & 0x0F);
     int sus;
-    if (useEnv) {
-        sus = vp.volumeEnvelope.value(0, 15);
-    } else {
+    if (useEnv) sus = vp.volumeEnvelope.value(0, 15);
+    else {
         sus = int(std::round(vp.sustain * vp.volume));
         sus = std::clamp(sus, 0, 15);
     }
     m_sid->write(base + 5, ((atk & 0x0F) << 4) | (dec & 0x0F));
     m_sid->write(base + 6, ((sus & 0x0F) << 4) | (vp.release & 0x0F));
-
     m_sid->write(base + 4, composeControl(vp, true));
 
     m_voices[v].active       = true;
     m_voices[v].pitch        = n.pitch;
+    m_voices[v].basePitch    = n.pitch;
     m_voices[v].endTick      = n.tick + n.length;
     m_voices[v].startTick    = n.tick;
-    m_voices[v].lastEnvIndex = useEnv ? 0 : -1;
+    m_voices[v].lastVolIdx   = useEnv ? 0 : -1;
+    m_voices[v].lastPitchIdx = -1;
+    m_voices[v].lastDutyIdx  = -1;
+    m_voices[v].lastArpIdx   = -1;
     m_voices[v].params       = n.params;
 }
 
@@ -114,22 +127,59 @@ void ArrangementPlayer::applyEnvelopes(double tick) {
     for (int v = 0; v < 3; ++v) {
         if (!m_voices[v].active || !m_voices[v].params) continue;
         const VoiceParams &vp = *m_voices[v].params;
-        if (vp.volumeEnvelope.isEmpty()) continue;
-
         int speed = std::max(1, vp.envelopeSpeed);
         double elapsed = tick - m_voices[v].startTick;
         if (elapsed < 0) elapsed = 0;
         int idx = int(elapsed * speed);
-        if (idx >= vp.volumeEnvelope.size())
-            idx = vp.volumeEnvelope.size() - 1;
-        if (idx < 0) idx = 0;
-
-        if (idx == m_voices[v].lastEnvIndex) continue;
-        m_voices[v].lastEnvIndex = idx;
-
-        int vol = vp.volumeEnvelope[idx];
         int base = v * 7;
-        m_sid->write(base + 6, ((vol & 0x0F) << 4) | (vp.release & 0x0F));
+
+        // ---- volume ----
+        if (!vp.volumeEnvelope.isEmpty()) {
+            int vi = std::min(idx, int(vp.volumeEnvelope.size()) - 1);
+            if (vi >= 0 && vi != m_voices[v].lastVolIdx) {
+                m_voices[v].lastVolIdx = vi;
+                int vol = vp.volumeEnvelope[vi];
+                m_sid->write(base + 6, ((vol & 0x0F) << 4) | (vp.release & 0x0F));
+            }
+        }
+
+        // ---- pitch ----
+        int pitchShift = 0;
+        if (!vp.pitchEnvelope.isEmpty()) {
+            int pi = std::min(idx, int(vp.pitchEnvelope.size()) - 1);
+            if (pi >= 0) {
+                pitchShift = vp.pitchEnvelope[pi] - 8;   // center = 8
+            }
+        }
+
+        // ---- arpeggio ----
+        int arpShift = 0;
+        if (!vp.arpeggioEnvelope.isEmpty()) {
+            int ai = std::min(idx, int(vp.arpeggioEnvelope.size()) - 1);
+            if (ai >= 0) arpShift = vp.arpeggioEnvelope[ai];
+        }
+
+        // ---- duty ----
+        int dutyChanged = 0;
+        if (!vp.dutyEnvelope.isEmpty()) {
+            int di = std::min(idx, int(vp.dutyEnvelope.size()) - 1);
+            if (di >= 0 && di != m_voices[v].lastDutyIdx) {
+                m_voices[v].lastDutyIdx = di;
+                int pw = vp.dutyEnvelope[di] * 273;   // 0..4095
+                if (pw < 0) pw = 0;
+                if (pw > 4095) pw = 4095;
+                m_sid->write(base + 2, pw & 0xFF);
+                m_sid->write(base + 3, (pw >> 8) & 0x0F);
+                dutyChanged = 1;
+            }
+        }
+
+        // ---- pitch+arpeggio → частота ----
+        if (pitchShift != 0 || arpShift != 0) {
+            writeFrequency(v, m_voices[v].basePitch, pitchShift + arpShift);
+        } else if (dutyChanged) {
+            // ничего не делаем — просто для читаемости
+        }
     }
 }
 
@@ -155,7 +205,6 @@ void ArrangementPlayer::processUntil(double tick) {
 void ArrangementPlayer::render(int16_t *out, int frames) {
     double ticksPerSec = m_bpm / 15.0;
     double ticksPerSample = ticksPerSec / double(m_sampleRate);
-
     int offset = 0;
     while (offset < frames) {
         double nextTick = m_currentTick + ticksPerSample;

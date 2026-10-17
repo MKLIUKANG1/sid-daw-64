@@ -7,8 +7,10 @@ class EnvelopeEditorWidget : public QWidget {
 public:
     explicit EnvelopeEditorWidget(QWidget *parent = nullptr);
 
-    void setEnvelope(QVector<int> *env, int maxValue = 15);
-    int  maxValue() const { return m_maxValue; }
+    void setEnvelope(QVector<int> *env,
+                     int maxValue,
+                     int defaultValue,
+                     bool showCenter = false);
 
 signals:
     void envelopeChanged();
@@ -30,7 +32,9 @@ private:
     int indexToX(int index) const;
 
     QVector<int> *m_envelope = nullptr;
-    int m_maxValue = 15;
-    int m_length   = 32;
-    bool m_drawing = false;
+    int  m_maxValue     = 15;
+    int  m_defaultValue = 15;
+    bool m_showCenter   = false;
+    int  m_length       = 32;
+    bool m_drawing      = false;
 };

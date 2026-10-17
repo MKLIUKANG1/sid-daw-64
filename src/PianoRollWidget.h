@@ -1,9 +1,11 @@
 #pragma once
 #include <QWidget>
+#include <QSet>
+#include <QVector>
 #include "Model.h"
 
-struct Pattern;
 class QUndoStack;
+struct Project;
 
 class PianoRollWidget : public QWidget {
     Q_OBJECT
@@ -11,15 +13,19 @@ public:
     explicit PianoRollWidget(QWidget *parent = nullptr);
 
     void setPattern(Pattern *pat);
+    void setProject(Project *p) { m_project = p; update(); }
     void setVoice(int v) { m_currentVoice = v; update(); }
-    int  currentVoice() const { return m_currentVoice; }
+    void setCurrentInstrument(int idx) { m_currentInstrument = idx; update(); }
     void setUndoStack(QUndoStack *s) { m_undoStack = s; }
-
-    void setZoom(int pixelsPerTick);
+    void setZoom(int z);
     int  zoom() const { return m_zoom; }
 
 signals:
     void patternChanged();
+    void panBy(int dx, int dy);
+    void noteInstrumentChanged(int instrumentIndex);
+    void requestNoteDialog(const QVector<int> &indices);
+    void instrumentDropped(const QVector<int> &indices, int instrumentIndex);
 
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -27,6 +33,10 @@ protected:
     void mouseMoveEvent(QMouseEvent *) override;
     void mouseReleaseEvent(QMouseEvent *) override;
     void wheelEvent(QWheelEvent *) override;
+    void keyPressEvent(QKeyEvent *) override;
+    void dragEnterEvent(QDragEnterEvent *e) override;
+    void dragMoveEvent(QDragMoveEvent *e) override;
+    void dropEvent(QDropEvent *e) override;
 
 private:
     struct Hit { int index = -1; bool onRightEdge = false; };
@@ -44,11 +54,24 @@ private:
     int tickToX(int tick) const;
 
     void updateMinimumSize();
+    void commitKeyboardMove(int pitchDelta, int tickDelta);
+    void clearSelection();
+    QColor colorForNote(const Note &n) const;
 
     Pattern     *m_pattern = nullptr;
+    Project     *m_project = nullptr;
     QUndoStack  *m_undoStack = nullptr;
     int m_currentVoice = 0;
+    int m_currentInstrument = -1;
     int m_zoom = 12;
+
+    QSet<int> m_selected;
+    bool   m_rubberBanding = false;
+    QPoint m_rubberStart;
+    QPoint m_rubberEnd;
+
+    bool   m_panning  = false;
+    QPoint m_panStart;
 
     int    m_dragIndex   = -1;
     bool   m_dragResize  = false;
@@ -59,4 +82,6 @@ private:
     int    m_origPitch   = 0;
     Note   m_origNote;
     bool   m_dragChanged = false;
+    QVector<int>  m_dragIndices;
+    QVector<Note> m_dragOldNotes;
 };

@@ -1,0 +1,12 @@
+{
+    "attack": 10,
+    "decay": 6,
+    "pan": -0.36000001430511475,
+    "pulseWidth": 2048,
+    "release": 1,
+    "ringMod": true,
+    "sustain": 9,
+    "sync": true,
+    "volume": 0.8600000143051147,
+    "waveform": 1
+}

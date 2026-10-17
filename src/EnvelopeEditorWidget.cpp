@@ -9,9 +9,12 @@ EnvelopeEditorWidget::EnvelopeEditorWidget(QWidget *parent) : QWidget(parent) {
     setFocusPolicy(Qt::StrongFocus);
 }
 
-void EnvelopeEditorWidget::setEnvelope(QVector<int> *env, int maxValue) {
-    m_envelope = env;
-    m_maxValue = std::max(1, maxValue);
+void EnvelopeEditorWidget::setEnvelope(QVector<int> *env, int maxValue,
+                                       int defaultValue, bool showCenter) {
+    m_envelope     = env;
+    m_maxValue     = std::max(1, maxValue);
+    m_defaultValue = std::clamp(defaultValue, 0, m_maxValue);
+    m_showCenter   = showCenter;
     updateLength();
     update();
 }
@@ -25,7 +28,8 @@ void EnvelopeEditorWidget::updateLength() {
 void EnvelopeEditorWidget::ensureEnvelopeSize(int index) {
     if (!m_envelope) return;
     while (m_envelope->size() <= index)
-        m_envelope->append(m_envelope->isEmpty() ? 15 : m_envelope->last());
+        m_envelope->append(m_envelope->isEmpty() ? m_defaultValue
+                                                 : m_envelope->last());
     if (m_length < m_envelope->size() + 8)
         m_length = m_envelope->size() + 8;
 }
@@ -60,7 +64,7 @@ void EnvelopeEditorWidget::paintEvent(QPaintEvent *) {
     QPainter p(this);
     p.fillRect(rect(), QColor(30, 30, 34));
 
-    // Сетка
+    // grid
     p.setPen(QColor(50, 50, 56));
     for (int i = 0; i <= 4; ++i) {
         int y = 4 + i * (height() - 8) / 4;
@@ -72,6 +76,13 @@ void EnvelopeEditorWidget::paintEvent(QPaintEvent *) {
         p.drawLine(x, 4, x, height() - 4);
     }
 
+    // center line
+    if (m_showCenter) {
+        int cy = valueToY(m_defaultValue);
+        p.setPen(QPen(QColor(90, 90, 100), 1, Qt::DashLine));
+        p.drawLine(4, cy, width() - 4, cy);
+    }
+
     if (!m_envelope || m_envelope->isEmpty()) {
         p.setPen(QColor(140, 140, 150));
         p.drawText(rect().adjusted(4, 4, -4, -4),
@@ -80,7 +91,6 @@ void EnvelopeEditorWidget::paintEvent(QPaintEvent *) {
         return;
     }
 
-    // График
     QPolygon poly;
     int n = std::min(m_length, int(m_envelope->size()));
     for (int i = 0; i < n; ++i)
@@ -89,7 +99,6 @@ void EnvelopeEditorWidget::paintEvent(QPaintEvent *) {
     p.setPen(QPen(QColor(100, 200, 255), 2));
     p.drawPolyline(poly);
 
-    // Точки
     p.setBrush(QColor(100, 200, 255));
     for (int i = 0; i < n; ++i)
         p.drawEllipse(QPoint(indexToX(i), valueToY((*m_envelope)[i])), 2, 2);

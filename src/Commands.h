@@ -1,8 +1,8 @@
 #pragma once
 #include <QUndoCommand>
+#include <QVector>
+#include <algorithm>
 #include "Model.h"
-
-// ---------- Piano Roll ----------
 
 class AddNoteCommand : public QUndoCommand {
 public:
@@ -42,7 +42,70 @@ private:
     Note m_old, m_new;
 };
 
-// ---------- Arrangement ----------
+class MoveNotesCommand : public QUndoCommand {
+public:
+    MoveNotesCommand(Pattern *pat, const QVector<int> &indices,
+                     const QVector<Note> &oldNotes, const QVector<Note> &newNotes)
+        : QUndoCommand("Move notes"), m_pat(pat), m_indices(indices),
+          m_old(oldNotes), m_new(newNotes) {}
+    void undo() override {
+        for (int i = 0; i < m_indices.size(); ++i)
+            m_pat->notes[m_indices[i]] = m_old[i];
+    }
+    void redo() override {
+        for (int i = 0; i < m_indices.size(); ++i)
+            m_pat->notes[m_indices[i]] = m_new[i];
+    }
+private:
+    Pattern *m_pat;
+    QVector<int> m_indices;
+    QVector<Note> m_old, m_new;
+};
+
+class RemoveNotesCommand : public QUndoCommand {
+public:
+    RemoveNotesCommand(Pattern *pat, QVector<int> indices)
+        : QUndoCommand("Delete notes"), m_pat(pat), m_indices(indices) {
+        std::sort(m_indices.begin(), m_indices.end());
+        for (int i : m_indices)
+            m_notes.append(m_pat->notes[i]);
+    }
+    void undo() override {
+        for (int i = 0; i < m_indices.size(); ++i)
+            m_pat->notes.insert(m_indices[i], m_notes[i]);
+    }
+    void redo() override {
+        for (int i = m_indices.size() - 1; i >= 0; --i)
+            m_pat->notes.removeAt(m_indices[i]);
+    }
+private:
+    Pattern *m_pat;
+    QVector<int> m_indices;
+    QVector<Note> m_notes;
+};
+
+class ChangeNoteInstrumentCommand : public QUndoCommand {
+public:
+    ChangeNoteInstrumentCommand(Pattern *pat, QVector<int> indices, int newInstr)
+        : QUndoCommand("Change note instrument"),
+          m_pat(pat), m_indices(indices), m_new(newInstr) {
+        for (int i : m_indices)
+            m_old.append(m_pat->notes[i].instrumentIndex);
+    }
+    void undo() override {
+        for (int k = 0; k < m_indices.size(); ++k)
+            m_pat->notes[m_indices[k]].instrumentIndex = m_old[k];
+    }
+    void redo() override {
+        for (int i : m_indices)
+            m_pat->notes[i].instrumentIndex = m_new;
+    }
+private:
+    Pattern *m_pat;
+    QVector<int> m_indices;
+    QVector<int> m_old;
+    int m_new;
+};
 
 class AddClipCommand : public QUndoCommand {
 public:
@@ -82,8 +145,6 @@ private:
     Clip m_old, m_new;
 };
 
-// ---------- Voice params (с merge) ----------
-
 class ChangeVoiceParamCommand : public QUndoCommand {
 public:
     ChangeVoiceParamCommand(Pattern *pat, int voice,
@@ -106,7 +167,65 @@ private:
     VoiceParams m_old, m_new;
 };
 
-// ---------- Pattern operations ----------
+class AddInstrumentCommand : public QUndoCommand {
+public:
+    AddInstrumentCommand(Project *proj, const Instrument &instr)
+        : QUndoCommand("Add instrument"), m_proj(proj), m_instrCopy(instr) {}
+    void undo() override { m_proj->instruments.pop_back(); }
+    void redo() override {
+        m_proj->instruments.push_back(std::make_unique<Instrument>(m_instrCopy));
+    }
+private:
+    Project *m_proj;
+    Instrument m_instrCopy;
+};
+
+class RemoveInstrumentCommand : public QUndoCommand {
+public:
+    RemoveInstrumentCommand(Project *proj, int index)
+        : QUndoCommand("Delete instrument"), m_proj(proj), m_index(index) {
+        m_instrCopy = *m_proj->instruments[index];
+    }
+    void undo() override {
+        m_proj->instruments.insert(
+            m_proj->instruments.begin() + m_index,
+            std::make_unique<Instrument>(m_instrCopy));
+    }
+    void redo() override {
+        m_proj->instruments.erase(m_proj->instruments.begin() + m_index);
+    }
+private:
+    Project *m_proj;
+    int m_index;
+    Instrument m_instrCopy;
+};
+
+class RenameInstrumentCommand : public QUndoCommand {
+public:
+    RenameInstrumentCommand(Instrument *instr,
+                            const QString &oldName, const QString &newName)
+        : QUndoCommand("Rename instrument"),
+          m_instr(instr), m_old(oldName), m_new(newName) {}
+    void undo() override { m_instr->name = m_old; }
+    void redo() override { m_instr->name = m_new; }
+private:
+    Instrument *m_instr;
+    QString m_old, m_new;
+};
+
+class ChangeInstrumentParamsCommand : public QUndoCommand {
+public:
+    ChangeInstrumentParamsCommand(Instrument *instr,
+                                  const VoiceParams &oldVP,
+                                  const VoiceParams &newVP)
+        : QUndoCommand("Change instrument parameters"),
+          m_instr(instr), m_old(oldVP), m_new(newVP) {}
+    void undo() override { m_instr->params = m_old; }
+    void redo() override { m_instr->params = m_new; }
+private:
+    Instrument *m_instr;
+    VoiceParams m_old, m_new;
+};
 
 class RenamePatternCommand : public QUndoCommand {
 public:
