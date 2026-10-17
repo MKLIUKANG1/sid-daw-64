@@ -19,6 +19,8 @@
   <img src="https://shields.io" alt="Qt6">
 </p>
 
+<p align="center"> <img src="icon.png" alt="SID DAW 64" width="128" height="128"> </p><h1 align="center">SID DAW 64</h1><p align="center"> <b>A DAW-style editor for the Commodore 64 SID chip</b> </p><p align="center"> <a href="https://github.com/MKLIUKANG1/sid-daw-64/releases/latest"> <img src="https://img.shields.io/github/v/release/MKLIUKANG1/sid-daw-64?style=flat-square&color=blue" alt="Latest release"> </a> <a href="https://github.com/MKLIUKANG1/sid-daw-64/blob/main/LICENSE"> <img src="https://img.shields.io/github/license/MKLIUKANG1/sid-daw-64?style=flat-square&color=green" alt="License"> </a> <img src="https://img.shields.io/badge/platform-Windows%20(x64)-lightgrey?style=flat-square" alt="Platform"> <img src="https://img.shields.io/badge/Qt-6-brightgreen?style=flat-square" alt="Qt6"> </p>
+
 ---
 
 ## 💾 Download
