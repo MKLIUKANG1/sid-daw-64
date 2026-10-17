@@ -146,4 +146,4 @@ MIT — see LICENSE.
 Author
 MKLIUKANG1 — github.com/MKLIUKANG1
 
-<p align="center"> <i>Built with love for the Commodore 64 scene</i> </p>
+Built with love for the Commodore 64 scene
