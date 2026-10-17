@@ -1,129 +1,183 @@
-<p align="center"> <img src="icon.png" alt="SID DAW 64" width="128" height="128"> </p><h1 align="center">SID DAW 64</h1><p align="center"> <b>A DAW-style editor for the Commodore 64 SID chip</b> </p><p align="center"> <a href="https://github.com/MKLIUKANG1/sid-daw-64/releases/latest"> <img src="https://img.shields.io/github/v/release/MKLIUKANG1/sid-daw-64?style=flat-square&color=blue" alt="Latest release"> </a> <a href="https://github.com/MKLIUKANG1/sid-daw-64/blob/main/LICENSE"> <img src="https://img.shields.io/github/license/MKLIUKANG1/sid-daw-64?style=flat-square&color=green" alt="License"> </a> <img src="https://img.shields.io/badge/platform-Windows%20(x64)-lightgrey?style=flat-square" alt="Platform"> <img src="https://img.shields.io/badge/Qt-6-brightgreen?style=flat-square" alt="Qt6"> </p>
-Download
-Pre-built Windows 64-bit binaries are available on the Releases page.
+<p align="center">
+  <img src="src/icon.png" alt="SID DAW 64" width="128" height="128">
+</p>
 
-Unpack the ZIP and run SidDAW.exe. No installation required.
+<h1 align="center">SID DAW 64</h1>
 
-Features
-Instruments
-Named instruments independent from patterns
+<p align="center">
+  <b>A DAW-style editor for the Commodore 64 SID chip</b>
+</p>
 
-Assign instrument to a note by dragging from the instrument dock
+<p align="center">
+  <a href="https://github.com">
+    <img src="https://shields.io" alt="Latest release">
+  </a>
+  <a href="https://github.com">
+    <img src="https://shields.io" alt="License">
+  </a>
+  <img src="https://shields.io" alt="Platform">
+  <img src="https://shields.io" alt="Qt6">
+</p>
 
-F key or middle-click on notes opens Note Properties dialog
+---
 
-Auto-created on MIDI import: Ch1 Lead, Ch2 Bass, Ch10 Drums, Ch3 Harmony
+## 💾 Download
 
-Envelope editor (FamiStudio-style)
+Pre-built Windows 64-bit binaries are available on the **[Releases](https://github.com)** page.
+
+1. Unpack the downloaded ZIP archive.
+2. Run `SidDAW.exe`.
+3. *No installation required!*
+
+---
+
+## 🚀 Features
+
+### 🎹 Instruments
+* **Independent Modules:** Named instruments exist completely separate from patterns.
+* **Drag-and-Drop:** Quickly assign an instrument to a note by dragging it from the instrument dock.
+* **Fine-Tuning:** Press the `F` key or middle-click on notes to open the **Note Properties** dialog.
+* **Smart MIDI Import:** Automatically creates standard tracks: `Ch1 Lead`, `Ch2 Bass`, `Ch10 Drums`, and `Ch3 Harmony`.
+
+### 🎛️ Envelope Editor (FamiStudio-style)
 Four hand-drawn envelopes per instrument, all active simultaneously:
 
-Envelope	Range	Description
-Volume	0..15	Note volume
-Pitch	0..15	Bipolar semitone shift (center 8 = no shift)
-Duty	0..15	Bipolar pulse width (center 8 = 50%)
-Arp	0..15	Semitone offset for arpeggios
-Adjustable speed (1..16 points per tick), per-track Clear button.
+| Envelope | Range | Description |
+| :--- | :---: | :--- |
+| **Volume** | `0..15` | Note volume |
+| **Pitch** | `0..15` | Bipolar semitone shift (center 8 = no shift) |
+| **Duty** | `0..15` | Bipolar pulse width (center 8 = 50%) |
+| **Arp** | `0..15` | Semitone offset for arpeggios |
 
-Composition
-Arrangement / Playlist — place clips on tracks, resize, drag, delete
+* Adjustable speed (`1..16` points per tick).
+* Per-track **Clear** button.
 
-Piano Roll — draw, drag, resize, rubber-band select notes
+### 🎼 Composition & Editing
+* **Arrangement / Playlist:** Easily place clips on tracks, resize, drag, or delete them.
+* **Advanced Piano Roll:** Draw, drag, resize, and rubber-band select multiple notes.
+* **Visual Preview:** Note preview inside clips is color-coded by the assigned instrument.
+* **Safe Workflow:** Full **Undo / Redo** support for every single edit operation.
+* **Mixing:** Per-voice mixer (volume, pan) + master volume control.
 
-Note preview inside clips (color = instrument)
+---
 
-Undo / Redo for every edit
+## ⌨️ Editing Shortcuts
 
-Per-voice mixer (volume, pan) + master volume
+| Action | Key / Input |
+| :--- | :--- |
+| **Select all notes** | `Ctrl + A` |
+| **Rubber-band select** | `Shift + Drag` |
+| **Delete selection** | `Delete` |
+| **Move (semitone / tick)** | `Arrow keys` |
+| **Move (octave / quarter)** | `Shift + Arrows` |
+| **Note properties** | `F` |
+| **Pan view** | `Middle mouse button` |
+| **Zoom** | `Ctrl + Mouse wheel` |
+| **Undo / Redo** | `Ctrl + Z` / `Ctrl + Y` |
 
-Editing shortcuts
-Action	Key
-Select all notes	Ctrl+A
-Rubber-band select	Shift + drag
-Delete selection	Delete
-Move (semitone / tick)	Arrow keys
-Move (octave / quarter)	Shift + arrows
-Note properties	F
-Pan view	Middle mouse button
-Zoom	Ctrl + mouse wheel
-Undo / Redo	Ctrl+Z / Ctrl+Y
-Localization
-English, Russian, Chinese, Portuguese (BR)
+---
 
-Selected in Language menu, saved via QSettings
+## 🌐 Localization
 
-MIDI
-Import .mid with channel selection dialog
+The interface supports the following languages:
+* 🇬🇧 English
+* 🇷🇺 Russian
+* 🇨🇳 Chinese
+* 🇧🇷 Portuguese (BR)
 
-Assign each MIDI channel to a SID voice
+*Language can be selected in the **Language menu** and is automatically saved via `QSettings`.*
 
-Choose single pattern or separate pattern per channel
+---
 
-Drum channel (Ch 10) auto-uses Noise waveform
+## 🔌 MIDI & Hardware Integration
 
-Live recording from MIDI keyboard via RtMidi
+* **Flexible Import:** Import `.mid` files with a dedicated channel selection dialog.
+* **Voice Mapping:** Assign each MIDI channel directly to a specific SID voice.
+* **Pattern Modes:** Choose between a single pattern layout or separate patterns per channel.
+* **Automated Drums:** The drum channel (`Ch 10`) automatically utilizes the Noise waveform.
+* **Live Recording:** Play and record in real-time from a MIDI keyboard via `RtMidi`.
 
-Projects and Export
-Save / load projects as .siddaw (JSON)
+---
 
-Voice presets as .json
+## 📁 Projects and Export
 
-Export WAV — offline render via reSIDfp
+* **Project Saves:** Save and load your projects as `.siddaw` (JSON format).
+* **Presets:** Save individual voice configurations as `.json` presets.
+* **WAV Export:** High-quality offline audio rendering powered by `reSIDfp`.
+* **SID Export:** Generates standard `PSID` files with an native 6502 player assembled via `64tass`.
 
-Export SID — PSID file with a 6502 player assembled by 64tass
+---
 
-Building on Windows (MSYS2 MINGW64)
-Install dependencies
-text
-pacman -S --needed base-devel mingw-w64-x86_64-toolchain ^
-    mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja ^
-    mingw-w64-x86_64-qt6-base mingw-w64-x86_64-qt6-multimedia ^
+## 🛠️ Building on Windows (MSYS2 MINGW64)
+
+### 1. Install Dependencies
+Run the following commands in your MSYS2 MINGW64 terminal:
+
+```bash
+pacman -S --needed base-devel mingw-w64-x86_64-toolchain \
+    mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja \
+    mingw-w64-x86_64-qt6-base mingw-w64-x86_64-qt6-multimedia \
     mingw-w64-x86_64-rtmidi mingw-w64-x86_64-libresidfp
 
 pacman -S --needed mingw-w64-ucrt-x86_64-64tass
 ln -sf /ucrt64/bin/64tass.exe /mingw64/bin/64tass.exe
-Build
-text
+```
+
+### 2. Build the Project
+```bash
 mkdir -p build && cd build
 cmake -G Ninja .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/mingw64
 cmake --build .
-Run
-text
+```
+
+### 3. Deploy and Run
+```bash
 cd build
 windeployqt --no-translations SidDAW.exe
 ./SidDAW.exe
-If the app complains about missing DLLs, copy them recursively with ldd (see deploy_all.sh in previous releases, or use windeployqt and manually copy libresidfp-0.dll, librtmidi-7.dll, libgcc_s_seh-1.dll, libstdc++-6.dll, libwinpthread-1.dll).
+```
+*Note: If the application complains about missing DLLs, copy them recursively with `ldd` (see `deploy_all.sh` in previous releases) or manually copy `libresidfp-0.dll`, `librtmidi-7.dll`, `libgcc_s_seh-1.dll`, `libstdc++-6.dll`, and `libwinpthread-1.dll`.*
 
-Architecture
-Module	Purpose
-src/Model.h	Data model (Note, VoiceParams, Instrument, Pattern, Clip, Project)
-src/SidEngine	reSIDfp wrapper
-src/ArrangementPlayer	Real-time playback across clips
-src/PatternPlayer	Offline render for WAV export
-src/SidAudioDevice	Bridges player to QAudioSink
-src/MainWindow	Main window, menus, wiring
-src/PianoRollWidget	Piano roll editor
-src/ArrangementWidget	Timeline with clips and preview
-src/VoicePanelWidget	Voice params UI (Sliders + 4 envelope tabs)
-src/EnvelopeEditorWidget	Drawable envelope editor
-src/InstrumentListWidget	Drag source for instrument assignment
-src/InstrumentEditorDialog	Instrument editing dialog
-src/NotePropertiesDialog	Per-note editing
-src/Commands.h	QUndoCommand subclasses for all edits
-src/MidiImporter, src/MidiImportDialog	MIDI parsing + channel selection
-src/MidiRecorder	Live MIDI capture
-src/ProjectIO	Project save/load (.siddaw)
-src/VoicePresetIO	Voice preset save/load
-src/WavExporter	Offline WAV render
-src/SidExporter	PSID writer
-src/LanguageManager	Localization (EN/RU/ZH/PT-BR)
-src/AboutDialog	About window
-player.asm	6502 SID player routine (assembled by 64tass)
-icon.rc	Windows .exe icon resource
-resources.qrc	Qt resource bundle (icon)
-License
-MIT — see LICENSE.
+---
 
-Author
-MKLIUKANG1 — github.com/MKLIUKANG1
+## 🏗️ Architecture Overview
 
-<p align="center"> <i>Built with love for the Commodore 64 scene</i> </p>
+| Module | Purpose |
+| :--- | :--- |
+| **`src/Model.h`** | Core data model (Note, VoiceParams, Instrument, Pattern, Clip, Project) |
+| **`src/SidEngine`** | Wrapper layer for the `reSIDfp` emulation library |
+| **`src/ArrangementPlayer`** | Manages real-time playback across multiple timeline clips |
+| **`src/PatternPlayer`** | Handles offline audio rendering for WAV exporting |
+| **`src/SidAudioDevice`** | Bridges the player backend engine to Qt's `QAudioSink` |
+| **`src/MainWindow`** | Main UI window, application wiring, and top menus |
+| **`src/PianoRollWidget`** | Interactive piano roll note editor view |
+| **`src/ArrangementWidget`** | Timeline layout featuring clip arrangement and visual previews |
+| **`src/VoicePanelWidget`** | Voice parameters panel containing control sliders and 4 envelope tabs |
+| **`src/EnvelopeEditorWidget`** | Canvas-based drawable envelope interface |
+| **`src/InstrumentListWidget`** | List container serving as the drag-and-drop source for instruments |
+| **`src/InstrumentEditorDialog`** | Pop-up configuration panel for instrument properties |
+| **`src/NotePropertiesDialog`** | Detailed inspector for modifying individual note attributes |
+| **`src/Commands.h`** | Custom `QUndoCommand` subclasses managing the edit history |
+| **`src/MidiImporter` / `*Dialog`** | Standard MIDI parser and channel distribution selector |
+| **`src/MidiRecorder`** | Intermediary buffer capturing incoming live MIDI events |
+| **`src/ProjectIO` / `VoicePresetIO`** | Serializers handling project `.siddaw` and preset JSON files |
+| **`src/WavExporter` / `SidExporter`** | Exporters producing finished `.wav` files and compiled `PSID` files |
+| **`src/LanguageManager`** | Coordinates runtime interface localization (EN / RU / ZH / PT-BR) |
+| **`player.asm`** | Native 6502 assembly SID playback routine (compiled with 64tass) |
+| **`icon.rc` / `resources.qrc`** | Embedded executable icon resources and Qt bundle mappings |
+
+---
+
+## 📄 License
+
+This project is licensed under the **MIT License** — see the [LICENSE](https://github.com) file for details.
+
+---
+
+## 👤 Author
+
+* **MKLIUKANG1** — [GitHub Profile](https://github.com)
+
+<p align="center">
+  <i>Built with 🎸 and love for the Commodore 64 demoscene</i>
+</p>
