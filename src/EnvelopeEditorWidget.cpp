@@ -1,6 +1,8 @@
 #include "EnvelopeEditorWidget.h"
 #include <QPainter>
 #include <QMouseEvent>
+#include <QDrag>
+#include <QMimeData>
 #include <algorithm>
 
 EnvelopeEditorWidget::EnvelopeEditorWidget(QWidget *parent) : QWidget(parent) {
@@ -17,6 +19,14 @@ void EnvelopeEditorWidget::setEnvelope(QVector<int> *env, int maxValue,
     m_showCenter   = showCenter;
     updateLength();
     update();
+}
+
+void EnvelopeEditorWidget::setPoints(const QVector<int> &points) {
+    if (!m_envelope) return;
+    *m_envelope = points;
+    updateLength();
+    update();
+    emit envelopeChanged();
 }
 
 void EnvelopeEditorWidget::updateLength() {
@@ -64,7 +74,6 @@ void EnvelopeEditorWidget::paintEvent(QPaintEvent *) {
     QPainter p(this);
     p.fillRect(rect(), QColor(30, 30, 34));
 
-    // grid
     p.setPen(QColor(50, 50, 56));
     for (int i = 0; i <= 4; ++i) {
         int y = 4 + i * (height() - 8) / 4;
@@ -76,7 +85,6 @@ void EnvelopeEditorWidget::paintEvent(QPaintEvent *) {
         p.drawLine(x, 4, x, height() - 4);
     }
 
-    // center line
     if (m_showCenter) {
         int cy = valueToY(m_defaultValue);
         p.setPen(QPen(QColor(90, 90, 100), 1, Qt::DashLine));
@@ -87,7 +95,7 @@ void EnvelopeEditorWidget::paintEvent(QPaintEvent *) {
         p.setPen(QColor(140, 140, 150));
         p.drawText(rect().adjusted(4, 4, -4, -4),
                    Qt::AlignCenter,
-                   "No envelope\n(click to draw)");
+                   "No envelope\n(Shift+drag to copy)");
         return;
     }
 
@@ -106,6 +114,13 @@ void EnvelopeEditorWidget::paintEvent(QPaintEvent *) {
 
 void EnvelopeEditorWidget::mousePressEvent(QMouseEvent *e) {
     if (!m_envelope || e->button() != Qt::LeftButton) return;
+
+    if (e->modifiers() & Qt::ShiftModifier) {
+        m_dragPotential = true;
+        m_dragStart = e->pos();
+        return;
+    }
+
     m_drawing = true;
     emit envelopeChangeStarted();
     int idx = xToIndex(e->pos().x());
@@ -116,6 +131,24 @@ void EnvelopeEditorWidget::mousePressEvent(QMouseEvent *e) {
 }
 
 void EnvelopeEditorWidget::mouseMoveEvent(QMouseEvent *e) {
+    if (m_dragPotential) {
+        if ((e->pos() - m_dragStart).manhattanLength() > 10) {
+            m_dragPotential = false;
+            if (!m_envelope || m_envelope->isEmpty()) return;
+            QStringList parts;
+            for (int v : *m_envelope) parts << QString::number(v);
+            QString payload = QString("%1:%2")
+                .arg(m_envelopeType).arg(parts.join(","));
+            auto *mime = new QMimeData;
+            mime->setData("application/x-sid-envelope",
+                          payload.toUtf8());
+            auto *drag = new QDrag(this);
+            drag->setMimeData(mime);
+            drag->exec(Qt::CopyAction);
+        }
+        return;
+    }
+
     if (!m_drawing || !m_envelope) return;
     int idx = xToIndex(e->pos().x());
     ensureEnvelopeSize(idx);
@@ -129,4 +162,5 @@ void EnvelopeEditorWidget::mouseReleaseEvent(QMouseEvent *) {
         m_drawing = false;
         emit envelopeChangeFinished();
     }
+    m_dragPotential = false;
 }

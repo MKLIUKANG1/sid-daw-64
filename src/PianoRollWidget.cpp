@@ -127,6 +127,26 @@ void PianoRollWidget::paintEvent(QPaintEvent *) {
         p.setBrush(col);
         p.setPen(col.darker(160));
         p.drawRoundedRect(r.adjusted(0, 1, -1, -1), 3, 3);
+
+        // Retrigger-маркер: следующая нота на том же голосе начинается
+        // точно в n.tick + n.length
+        bool hasRetrigger = false;
+        for (const auto &other : m_pattern->notes) {
+            if (&other == &n) continue;
+            if (other.voice == n.voice && other.tick == n.tick + n.length) {
+                hasRetrigger = true;
+                break;
+            }
+        }
+        if (hasRetrigger && w >= 6) {
+            // Жёлтый кружок в правом верхнем углу ноты
+            int mr = 5;
+            QRect marker(x + w - mr - 2, y + 2, mr, mr);
+            p.setBrush(QColor(255, 220, 60));
+            p.setPen(QPen(QColor(180, 140, 20), 1));
+            p.drawEllipse(marker);
+        }
+
         if (m_selected.contains(i)) {
             p.setPen(QPen(QColor(255, 255, 100), 2));
             p.setBrush(Qt::NoBrush);
@@ -262,6 +282,34 @@ void PianoRollWidget::mousePressEvent(QMouseEvent *e) {
 }
 
 void PianoRollWidget::mouseMoveEvent(QMouseEvent *e) {
+    // Отслеживаем retrigger под курсором
+    if (m_pattern) {
+        Hit h = hitTest(e->pos());
+        if (h.index >= 0 && h.index < m_pattern->notes.size()) {
+            const auto &n = m_pattern->notes[h.index];
+            bool found = false;
+            int targetPitch = -1;
+            for (const auto &other : m_pattern->notes) {
+                if (&other == &n) continue;
+                if (other.voice == n.voice && other.tick == n.tick + n.length) {
+                    found = true;
+                    targetPitch = other.pitch;
+                    break;
+                }
+            }
+            if (found && h.index != m_lastHoveredRetrigger) {
+                m_lastHoveredRetrigger = h.index;
+                emit retriggerHovered(n.pitch, targetPitch);
+            } else if (!found && m_lastHoveredRetrigger >= 0) {
+                m_lastHoveredRetrigger = -1;
+                emit retriggerHovered(-1, -1);
+            }
+        } else if (m_lastHoveredRetrigger >= 0) {
+            m_lastHoveredRetrigger = -1;
+            emit retriggerHovered(-1, -1);
+        }
+    }
+
     if (m_panning) {
         QPoint d = m_panStart - e->pos();
         emit panBy(d.x(), d.y());
@@ -272,15 +320,26 @@ void PianoRollWidget::mouseMoveEvent(QMouseEvent *e) {
     if (!m_dragging || !m_pattern || m_dragIndex < 0) return;
 
     QPoint delta = e->pos() - m_dragStart;
+    int tickDelta = delta.x() / tickWidth();
+
     if (m_dragResize) {
-        auto &n = m_pattern->notes[m_dragIndex];
-        n.length = qMax(1, m_origLength + delta.x() / tickWidth());
+        // Применяем одинаковую дельту длины ко ВСЕМ выделенным нотам
+        if (!m_dragIndices.isEmpty()) {
+            for (int k = 0; k < m_dragIndices.size(); ++k) {
+                Note nn = m_dragOldNotes[k];
+                nn.length = qMax(1, m_dragOldNotes[k].length + tickDelta);
+                m_pattern->notes[m_dragIndices[k]] = nn;
+            }
+        } else {
+            // fallback (не должно случаться, но на всякий случай)
+            auto &n = m_pattern->notes[m_dragIndex];
+            n.length = qMax(1, m_origLength + tickDelta);
+        }
     } else {
-        int tD = delta.x() / tickWidth();
         int pD = -delta.y() / rowHeight();
         for (int k = 0; k < m_dragIndices.size(); ++k) {
             Note nn = m_dragOldNotes[k];
-            nn.tick = qMax(0, m_dragOldNotes[k].tick + tD);
+            nn.tick  = qMax(0, m_dragOldNotes[k].tick + tickDelta);
             nn.pitch = qBound(lowestPitch(),
                               m_dragOldNotes[k].pitch + pD, highestPitch());
             m_pattern->notes[m_dragIndices[k]] = nn;
@@ -308,33 +367,29 @@ void PianoRollWidget::mouseReleaseEvent(QMouseEvent *e) {
         update();
         return;
     }
-    if (m_dragging && m_dragChanged && m_pattern) {
-        if (m_dragResize && m_dragIndex >= 0) {
-            Note newN = m_pattern->notes[m_dragIndex];
-            if (newN.length != m_origNote.length && m_undoStack) {
-                m_pattern->notes[m_dragIndex] = m_origNote;
-                m_undoStack->push(new ModifyNoteCommand(
-                    m_pattern, m_dragIndex, m_origNote, newN));
+
+    if (m_dragging && m_dragChanged && m_pattern && !m_dragIndices.isEmpty()) {
+        QVector<Note> newNotes;
+        bool anyChange = false;
+        for (int k = 0; k < m_dragIndices.size(); ++k) {
+            Note nn = m_pattern->notes[m_dragIndices[k]];
+            newNotes.append(nn);
+            if (m_dragResize) {
+                if (nn.length != m_dragOldNotes[k].length) anyChange = true;
+            } else {
+                if (nn.tick  != m_dragOldNotes[k].tick ||
+                    nn.pitch != m_dragOldNotes[k].pitch) anyChange = true;
             }
-            emit patternChanged();
-        } else if (!m_dragResize && !m_dragIndices.isEmpty()) {
-            QVector<Note> newNotes;
-            bool any = false;
-            for (int k = 0; k < m_dragIndices.size(); ++k) {
-                Note nn = m_pattern->notes[m_dragIndices[k]];
-                newNotes.append(nn);
-                if (nn.tick != m_dragOldNotes[k].tick ||
-                    nn.pitch != m_dragOldNotes[k].pitch) any = true;
-            }
-            if (any && m_undoStack) {
-                for (int k = 0; k < m_dragIndices.size(); ++k)
-                    m_pattern->notes[m_dragIndices[k]] = m_dragOldNotes[k];
-                m_undoStack->push(new MoveNotesCommand(
-                    m_pattern, m_dragIndices, m_dragOldNotes, newNotes));
-            }
-            emit patternChanged();
         }
+        if (anyChange && m_undoStack) {
+            for (int k = 0; k < m_dragIndices.size(); ++k)
+                m_pattern->notes[m_dragIndices[k]] = m_dragOldNotes[k];
+            m_undoStack->push(new MoveNotesCommand(
+                m_pattern, m_dragIndices, m_dragOldNotes, newNotes));
+        }
+        emit patternChanged();
     }
+
     m_dragging = false; m_dragIndex = -1; m_dragResize = false; m_dragChanged = false;
     m_dragIndices.clear(); m_dragOldNotes.clear();
 }
@@ -372,6 +427,9 @@ void PianoRollWidget::keyPressEvent(QKeyEvent *e) {
         update();
         return;
     }
+    if (ctrl && e->key() == Qt::Key_C) { copySelection(); e->accept(); return; }
+    if (ctrl && e->key() == Qt::Key_V) { pasteNotes();    e->accept(); return; }
+    if (ctrl && e->key() == Qt::Key_X) { cutSelection();  e->accept(); return; }
     if (e->key() == Qt::Key_F) {
         if (!m_selected.isEmpty()) {
             QVector<int> idx;
@@ -395,6 +453,23 @@ void PianoRollWidget::keyPressEvent(QKeyEvent *e) {
         }
         return;
     }
+
+    // Квантизация: Q = 1/4 (4 тика), W = 1/8 (2 тика)
+    if (e->key() == Qt::Key_Q) {
+        if (!m_selected.isEmpty()) {
+            quantizeSelection(4);
+        }
+        e->accept();
+        return;
+    }
+    if (e->key() == Qt::Key_W) {
+        if (!m_selected.isEmpty()) {
+            quantizeSelection(2);
+        }
+        e->accept();
+        return;
+    }
+
     if (m_selected.isEmpty()) { QWidget::keyPressEvent(e); return; }
 
     int pStep = shift ? 12 : 1;
@@ -440,4 +515,80 @@ void PianoRollWidget::dropEvent(QDropEvent *e) {
     }
     emit instrumentDropped(indices, idx);
     e->acceptProposedAction();
+}
+
+void PianoRollWidget::quantizeSelection(int grid) {
+    if (!m_pattern || m_selected.isEmpty() || grid <= 0) return;
+
+    QVector<int> indices;
+    QVector<Note> oldNotes, newNotes;
+    for (int i : m_selected) {
+        if (i < 0 || i >= m_pattern->notes.size()) continue;
+        Note oldN = m_pattern->notes[i];
+        Note newN = oldN;
+        // Округляем tick к ближайшей сетке
+        int snapped = int(std::round(double(oldN.tick) / grid)) * grid;
+        if (snapped < 0) snapped = 0;
+        // Длину тоже округляем (минимум = grid)
+        int lenSnapped = int(std::round(double(oldN.length) / grid)) * grid;
+        if (lenSnapped < grid) lenSnapped = grid;
+
+        if (snapped != oldN.tick || lenSnapped != oldN.length) {
+            newN.tick = snapped;
+            newN.length = lenSnapped;
+            indices.append(i);
+            oldNotes.append(oldN);
+            newNotes.append(newN);
+        }
+    }
+    if (indices.isEmpty()) return;
+
+    if (m_undoStack)
+        m_undoStack->push(new MoveNotesCommand(m_pattern, indices, oldNotes, newNotes));
+    else
+        for (int k = 0; k < indices.size(); ++k)
+            m_pattern->notes[indices[k]] = newNotes[k];
+
+    update();
+    emit patternChanged();
+}
+void PianoRollWidget::copySelection() {
+    if (!m_pattern || m_selected.isEmpty()) return;
+    m_clipboard.clear();
+    m_clipboardAnchor = 1000000;
+    for (int i : m_selected) {
+        if (i < 0 || i >= m_pattern->notes.size()) continue;
+        m_clipboard.append(m_pattern->notes[i]);
+        if (m_pattern->notes[i].tick < m_clipboardAnchor)
+            m_clipboardAnchor = m_pattern->notes[i].tick;
+    }
+    if (m_clipboard.isEmpty()) m_clipboardAnchor = 0;
+}
+
+void PianoRollWidget::pasteNotes() {
+    if (!m_pattern || m_clipboard.isEmpty() || !m_undoStack) return;
+    int offset = m_pasteCursor - m_clipboardAnchor;
+    if (offset < 0) offset = 0;
+    m_undoStack->beginMacro("Paste notes");
+    m_selected.clear();
+    for (const auto &cn : m_clipboard) {
+        Note n = cn;
+        n.tick = n.tick + offset;
+        m_undoStack->push(new AddNoteCommand(m_pattern, n));
+        m_selected.insert(m_pattern->notes.size() - 1);
+    }
+    m_undoStack->endMacro();
+    update();
+    emit patternChanged();
+}
+
+void PianoRollWidget::cutSelection() {
+    copySelection();
+    if (m_selected.isEmpty() || !m_pattern) return;
+    QVector<int> idx;
+    for (int i : m_selected) idx.append(i);
+    if (m_undoStack) m_undoStack->push(new RemoveNotesCommand(m_pattern, idx));
+    m_selected.clear();
+    update();
+    emit patternChanged();
 }

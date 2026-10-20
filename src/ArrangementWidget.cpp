@@ -15,7 +15,8 @@ ArrangementWidget::ArrangementWidget(QWidget *parent) : QWidget(parent) {
 }
 
 void ArrangementWidget::updateMinimumSize() {
-    setMinimumHeight(rulerHeight() + 4 * trackHeight() + 4);
+    int tracks = m_project ? m_project->trackCount : 4;
+    setMinimumHeight(rulerHeight() + tracks * trackHeight() + 4);
     if (m_project)
         setMinimumWidth(labelWidth() + m_project->totalTicks * m_tickWidth);
     else
@@ -44,9 +45,14 @@ void ArrangementWidget::wheelEvent(QWheelEvent *e) {
         int delta = e->angleDelta().y() > 0 ? 1 : -1;
         setZoom(m_tickWidth + delta);
         e->accept();
-    } else {
-        QWidget::wheelEvent(e);
+        return;
     }
+    if (e->modifiers() & Qt::ShiftModifier) {
+        emit panBy(-e->angleDelta().y() * 2, 0);
+    } else {
+        emit panBy(0, -e->angleDelta().y() * 2);
+    }
+    e->accept();
 }
 
 void ArrangementWidget::paintEvent(QPaintEvent *) {
@@ -354,4 +360,23 @@ void ArrangementWidget::mouseReleaseEvent(QMouseEvent *e) {
     m_dragIndex  = -1;
     m_dragResize = false;
     m_dragChanged = false;
+}
+
+void ArrangementWidget::mouseDoubleClickEvent(QMouseEvent *e) {
+    if (!m_project) return;
+    if (e->pos().y() < rulerHeight()) return;
+    if (e->pos().x() < labelWidth()) return;
+
+    Hit h = hitTest(e->pos());
+    if (h.index >= 0) {
+        emit clipActivated(h.index);
+        e->accept();
+        return;
+    }
+    int tr = yToTrack(e->pos().y());
+    int t = xToTick(e->pos().x());
+    if (tr >= 0 && tr < m_project->trackCount && t >= 0) {
+        emit trackActivated(tr, t);
+        e->accept();
+    }
 }

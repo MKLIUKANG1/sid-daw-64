@@ -20,10 +20,17 @@ public:
     void setZoom(int z);
     int  zoom() const { return m_zoom; }
 
+    void setPasteCursor(int tick) { m_pasteCursor = tick; }
+    void copySelection();
+    void pasteNotes();
+    void cutSelection();
+    void quantizeSelection(int grid);
+
 signals:
     void patternChanged();
     void panBy(int dx, int dy);
     void noteInstrumentChanged(int instrumentIndex);
+    void retriggerHovered(int pitchFrom, int pitchTo);
     void requestNoteDialog(const QVector<int> &indices);
     void instrumentDropped(const QVector<int> &indices, int instrumentIndex);
 
@@ -66,10 +73,16 @@ private:
     int m_zoom = 12;
 
     QSet<int> m_selected;
+
+    QVector<Note> m_clipboard;
+    int m_clipboardAnchor = 0;
+    int m_pasteCursor = 0;
+
     bool   m_rubberBanding = false;
     QPoint m_rubberStart;
     QPoint m_rubberEnd;
 
+    int    m_lastHoveredRetrigger = -1;
     bool   m_panning  = false;
     QPoint m_panStart;
 

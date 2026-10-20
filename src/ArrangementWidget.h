@@ -22,6 +22,8 @@ signals:
     void projectChanged();
     void seekRequested(double tick);
     void panBy(int dx, int dy);
+    void clipActivated(int clipIndex);
+    void trackActivated(int track, int tick);
 
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -29,6 +31,7 @@ protected:
     void mouseMoveEvent(QMouseEvent *) override;
     void mouseReleaseEvent(QMouseEvent *) override;
     void wheelEvent(QWheelEvent *) override;
+    void mouseDoubleClickEvent(QMouseEvent *) override;
 
 private:
     struct Hit { int index = -1; bool onRightEdge = false; };

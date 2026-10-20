@@ -19,48 +19,51 @@ QVector<int> jsonToVec(const QJsonArray &a) {
 
 QJsonObject voiceToJson(const VoiceParams &vp) {
     QJsonObject o;
-    o["waveform"]   = vp.waveform;
+    o["waveform"] = vp.waveform;
     o["pulseWidth"] = vp.pulseWidth;
-    o["attack"]     = vp.attack;
-    o["decay"]      = vp.decay;
-    o["sustain"]    = vp.sustain;
-    o["release"]    = vp.release;
-    o["ringMod"]    = vp.ringMod;
-    o["sync"]       = vp.sync;
-    o["volume"]     = double(vp.volume);
-    o["pan"]        = double(vp.pan);
+    o["attack"] = vp.attack;
+    o["decay"] = vp.decay;
+    o["sustain"] = vp.sustain;
+    o["release"] = vp.release;
+    o["ringMod"] = vp.ringMod;
+    o["sync"] = vp.sync;
+    o["volume"] = double(vp.volume);
+    o["pan"] = double(vp.pan);
     o["envelopeSpeed"] = vp.envelopeSpeed;
-    o["volumeEnvelope"]   = vecToJson(vp.volumeEnvelope);
-    o["pitchEnvelope"]    = vecToJson(vp.pitchEnvelope);
-    o["dutyEnvelope"]     = vecToJson(vp.dutyEnvelope);
+    o["pitchEnvelopeAbsolute"] = vp.pitchEnvelopeAbsolute;
+    o["volumeEnvelope"] = vecToJson(vp.volumeEnvelope);
+    o["pitchEnvelope"] = vecToJson(vp.pitchEnvelope);
+    o["dutyEnvelope"] = vecToJson(vp.dutyEnvelope);
     o["arpeggioEnvelope"] = vecToJson(vp.arpeggioEnvelope);
     return o;
 }
 
 VoiceParams voiceFromJson(const QJsonObject &o) {
     VoiceParams vp;
-    vp.waveform   = o.value("waveform").toInt(1);
+    vp.waveform = o.value("waveform").toInt(1);
     vp.pulseWidth = o.value("pulseWidth").toInt(2048);
-    vp.attack     = o.value("attack").toInt(1);
-    vp.decay      = o.value("decay").toInt(0);
-    vp.sustain    = o.value("sustain").toInt(15);
-    vp.release    = o.value("release").toInt(3);
-    vp.ringMod    = o.value("ringMod").toBool(false);
-    vp.sync       = o.value("sync").toBool(false);
-    vp.volume     = float(o.value("volume").toDouble(1.0));
-    vp.pan        = float(o.value("pan").toDouble(0.0));
+    vp.attack = o.value("attack").toInt(1);
+    vp.decay = o.value("decay").toInt(0);
+    vp.sustain = o.value("sustain").toInt(15);
+    vp.release = o.value("release").toInt(3);
+    vp.ringMod = o.value("ringMod").toBool(false);
+    vp.sync = o.value("sync").toBool(false);
+    vp.volume = float(o.value("volume").toDouble(1.0));
+    vp.pan = float(o.value("pan").toDouble(0.0));
     vp.envelopeSpeed = o.value("envelopeSpeed").toInt(4);
-    vp.volumeEnvelope   = jsonToVec(o.value("volumeEnvelope").toArray());
-    vp.pitchEnvelope    = jsonToVec(o.value("pitchEnvelope").toArray());
-    vp.dutyEnvelope     = jsonToVec(o.value("dutyEnvelope").toArray());
+    vp.pitchEnvelopeAbsolute = o.value("pitchEnvelopeAbsolute").toBool(false);
+    vp.volumeEnvelope = jsonToVec(o.value("volumeEnvelope").toArray());
+    vp.pitchEnvelope = jsonToVec(o.value("pitchEnvelope").toArray());
+    vp.dutyEnvelope = jsonToVec(o.value("dutyEnvelope").toArray());
     vp.arpeggioEnvelope = jsonToVec(o.value("arpeggioEnvelope").toArray());
     return vp;
 }
 
 QJsonObject patternToJson(const Pattern &p) {
     QJsonObject o;
-    o["name"]        = p.name;
+    o["name"] = p.name;
     o["lengthTicks"] = p.lengthTicks;
+    o["isDrumPattern"] = p.isDrumPattern;
     QJsonArray notes;
     for (const auto &n : p.notes) {
         QJsonObject no;
@@ -78,7 +81,7 @@ QJsonObject patternToJson(const Pattern &p) {
 
 Pattern patternFromJson(const QJsonObject &o) {
     Pattern p;
-    p.name        = o.value("name").toString("Pattern");
+    p.name = o.value("name").toString("Pattern");
     p.lengthTicks = o.value("lengthTicks").toInt(64);
     for (const auto &nv : o.value("notes").toArray()) {
         QJsonObject no = nv.toObject();
@@ -102,7 +105,7 @@ Pattern patternFromJson(const QJsonObject &o) {
 QString ProjectIO::save(const Project &project, int bpm, const QString &path) {
     QJsonObject root;
     root["format"] = "SidDAW-project";
-    root["version"] = 3;
+    root["version"] = 4;
     root["bpm"] = bpm;
 
     QJsonArray patterns;
@@ -112,11 +115,24 @@ QString ProjectIO::save(const Project &project, int bpm, const QString &path) {
     QJsonArray instruments;
     for (const auto &instr : project.instruments) {
         QJsonObject io;
-        io["name"]   = instr->name;
+        io["name"] = instr->name;
         io["params"] = voiceToJson(instr->params);
         instruments.append(io);
     }
     root["instruments"] = instruments;
+
+    QJsonObject drumKit;
+    drumKit["name"] = project.drumKit.name;
+    QJsonArray slotsArr;
+    for (const auto &s : project.drumKit.entries) {
+        QJsonObject so;
+        so["midiPitch"] = s.midiPitch;
+        so["name"] = s.name;
+        so["instrumentIndex"] = s.instrumentIndex;
+        slotsArr.append(so);
+    }
+    drumKit["slots"] = slotsArr;
+    root["drumKit"] = drumKit;
 
     QJsonArray clips;
     for (const auto &c : project.clips) {
@@ -128,6 +144,15 @@ QString ProjectIO::save(const Project &project, int bpm, const QString &path) {
         clips.append(co);
     }
     root["clips"] = clips;
+    QJsonObject sidG;
+    sidG["filterCutoff"]    = project.sidGlobal.filterCutoff;
+    sidG["filterResonance"] = project.sidGlobal.filterResonance;
+    sidG["filterMode"]      = project.sidGlobal.filterMode;
+    sidG["filterEnabled"]   = project.sidGlobal.filterEnabled;
+    sidG["masterVolume"]    = project.sidGlobal.masterVolume;
+    sidG["filterVoices"]    = project.sidGlobal.filterVoices;
+    root["sidGlobal"] = sidG;
+
     root["trackCount"] = project.trackCount;
     root["totalTicks"] = project.totalTicks;
 
@@ -158,6 +183,16 @@ QString ProjectIO::load(Project &project, int &bpm, const QString &path) {
     fresh.trackCount = root.value("trackCount").toInt(4);
     fresh.totalTicks = root.value("totalTicks").toInt(256);
 
+    QJsonObject sidG = root.value("sidGlobal").toObject();
+    if (!sidG.isEmpty()) {
+        fresh.sidGlobal.filterCutoff    = sidG.value("filterCutoff").toInt(1024);
+        fresh.sidGlobal.filterResonance = sidG.value("filterResonance").toInt(8);
+        fresh.sidGlobal.filterMode      = sidG.value("filterMode").toInt(0);
+        fresh.sidGlobal.filterEnabled   = sidG.value("filterEnabled").toBool(true);
+        fresh.sidGlobal.masterVolume    = sidG.value("masterVolume").toInt(15);
+        fresh.sidGlobal.filterVoices    = sidG.value("filterVoices").toInt(0x07);
+    }
+
     for (const auto &pv : root.value("patterns").toArray()) {
         auto p = std::make_unique<Pattern>(patternFromJson(pv.toObject()));
         fresh.patterns.push_back(std::move(p));
@@ -170,6 +205,17 @@ QString ProjectIO::load(Project &project, int &bpm, const QString &path) {
         instr->name = io.value("name").toString("Instrument");
         instr->params = voiceFromJson(io.value("params").toObject());
         fresh.instruments.push_back(std::move(instr));
+    }
+
+    QJsonObject dk = root.value("drumKit").toObject();
+    fresh.drumKit.name = dk.value("name").toString("Drum Kit");
+    for (const auto &sv : dk.value("slots").toArray()) {
+        QJsonObject so = sv.toObject();
+        DrumSlot s;
+        s.midiPitch = so.value("midiPitch").toInt(36);
+        s.name = so.value("name").toString("Drum");
+        s.instrumentIndex = so.value("instrumentIndex").toInt(-1);
+        fresh.drumKit.entries.append(s);
     }
 
     for (const auto &cv : root.value("clips").toArray()) {

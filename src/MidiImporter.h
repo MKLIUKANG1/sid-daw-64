@@ -25,11 +25,13 @@ QString importFile(const QString &path,
                    int &outBpm,
                    int &outLengthTicks,
                    QVector<RawNote> &outNotes,
-                   QVector<ChannelInfo> &outChannels);
+                   QVector<ChannelInfo> &outChannels,
+                   QHash<int,int> *outChannelPrograms = nullptr);
 
 void buildPatternFromSelection(const QVector<RawNote> &rawNotes,
                                const QHash<int,int> &channelToVoice,
                                Pattern &outPattern,
-                               const QHash<int,int> &channelToInstrument = {});
+                               const QHash<int,int> &channelToInstrument = {},
+                               const QHash<int,int> &drumPitchToInstrument = {});
 
 } // namespace MidiImporter

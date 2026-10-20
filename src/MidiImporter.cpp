@@ -23,7 +23,8 @@ quint32 readVarLen(QDataStream &s, bool &ok) {
 
 void processTrack(QDataStream &s, quint32 trackLen,
                   QVector<RawNote> &outNotes, int &outBpm,
-                  quint32 &maxTickMidi) {
+                  quint32 &maxTickMidi,
+                  QHash<int,int> &channelPrograms) {
     quint32 ticks = 0;
     quint8 runningStatus = 0;
     QHash<int, quint32> activeNotes;
@@ -92,12 +93,16 @@ void processTrack(QDataStream &s, quint32 trackLen,
                     outNotes.append(n);
                 }
             }
+        } else if (type == 0xC0) {
+            quint8 program = 0;
+            s >> program;
+            channelPrograms[channel] = program & 0x7F;
+        } else if (type == 0xD0) {
+            quint8 a = 0;
+            s >> a;
         } else if (type == 0xA0 || type == 0xB0 || type == 0xE0) {
             quint8 a = 0, b = 0;
             s >> a >> b;
-        } else if (type == 0xC0 || type == 0xD0) {
-            quint8 a = 0;
-            s >> a;
         } else {
             break;
         }
@@ -126,7 +131,8 @@ QString MidiImporter::importFile(const QString &path,
                                  int &outBpm,
                                  int &outLengthTicks,
                                  QVector<RawNote> &outNotes,
-                                 QVector<ChannelInfo> &outChannels) {
+                                 QVector<ChannelInfo> &outChannels,
+                                 QHash<int,int> *outChannelPrograms) {
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly))
         return "Cannot open file: " + path;
@@ -155,6 +161,7 @@ QString MidiImporter::importFile(const QString &path,
     outBpm = 120;
     quint32 maxTickMidi = 0;
     QVector<RawNote> rawNotes;
+    QHash<int,int> channelPrograms;
 
     for (int t = 0; t < nTracks; ++t) {
         if (s.readRawData(magic, 4) != 4 || std::memcmp(magic, "MTrk", 4) != 0)
@@ -163,7 +170,7 @@ QString MidiImporter::importFile(const QString &path,
         s >> trackLen;
         if (s.status() != QDataStream::Ok)
             return "Unexpected end of MIDI stream";
-        processTrack(s, trackLen, rawNotes, outBpm, maxTickMidi);
+        processTrack(s, trackLen, rawNotes, outBpm, maxTickMidi, channelPrograms);
     }
 
     double scale = 4.0 / double(division);
@@ -178,7 +185,6 @@ QString MidiImporter::importFile(const QString &path,
         return a.pitch > b.pitch;
     });
 
-    // ---- Собираем информацию по каналам ----
     QHash<int, ChannelInfo> chMap;
     for (const auto &n : rawNotes) {
         ChannelInfo &ci = chMap[n.channel];
@@ -197,13 +203,17 @@ QString MidiImporter::importFile(const QString &path,
     outLengthTicks = ((outLengthTicks + 15) / 16) * 16;
     if (outLengthTicks < 16) outLengthTicks = 16;
 
+    if (outChannelPrograms)
+        *outChannelPrograms = channelPrograms;
+
     return {};
 }
 
 void MidiImporter::buildPatternFromSelection(const QVector<RawNote> &rawNotes,
                                              const QHash<int,int> &channelToVoice,
                                              Pattern &outPattern,
-                                             const QHash<int,int> &channelToInstrument) {
+                                             const QHash<int,int> &channelToInstrument,
+                                             const QHash<int,int> &drumPitchToInstrument) {
     QVector<RawNote> selected;
     for (const auto &n : rawNotes) {
         auto it = channelToVoice.find(n.channel);
@@ -211,19 +221,14 @@ void MidiImporter::buildPatternFromSelection(const QVector<RawNote> &rawNotes,
         selected.append(n);
     }
     std::sort(selected.begin(), selected.end(),
-              [](const RawNote &a, const RawNote &b) {
-        return a.tick < b.tick;
-    });
+              [](const RawNote &a, const RawNote &b) { return a.tick < b.tick; });
 
     int lastNoteIdx[3] = {-1, -1, -1};
     int lastNoteEnd[3] = {-1, -1, -1};
-    bool drumUsed[3]   = {false, false, false};
 
     for (const auto &rn : selected) {
         int voice = channelToVoice.value(rn.channel, -1);
         if (voice < 0 || voice > 2) continue;
-
-        if (rn.channel == 9) drumUsed[voice] = true;
 
         if (lastNoteEnd[voice] > rn.tick) {
             int prevIdx = lastNoteIdx[voice];
@@ -239,25 +244,17 @@ void MidiImporter::buildPatternFromSelection(const QVector<RawNote> &rawNotes,
         n.length   = rn.length;
         n.velocity = std::clamp(rn.velocity / 8, 1, 15);
         n.voice    = voice;
-        n.instrumentIndex = channelToInstrument.value(rn.channel, -1);
+
+        if (rn.channel == 9 && drumPitchToInstrument.contains(rn.pitch)) {
+            n.instrumentIndex = drumPitchToInstrument.value(rn.pitch);
+        } else {
+            n.instrumentIndex = channelToInstrument.value(rn.channel, -1);
+        }
 
         int newIdx = outPattern.notes.size();
         outPattern.notes.append(n);
         lastNoteIdx[voice] = newIdx;
         lastNoteEnd[voice] = rn.tick + rn.length;
-    }
-
-    // Fallback: если инструмент для drum-канала не задан —
-    // ставим VoiceParams напрямую в Noise (сработает для нот без инструмента).
-    for (int v = 0; v < 3; ++v) {
-        if (!drumUsed[v]) continue;
-        VoiceParams &vp = outPattern.voiceParams[v];
-        vp.waveform      = 3;
-        vp.attack        = 0;
-        vp.decay         = 4;
-        vp.sustain       = 0;
-        vp.release       = 2;
-        vp.volumeEnvelope.clear();
     }
 
     std::sort(outPattern.notes.begin(), outPattern.notes.end(),

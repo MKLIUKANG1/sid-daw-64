@@ -16,6 +16,10 @@ public:
     float masterVolume() const { return m_masterVolume; }
     double playheadTick() const { return m_currentTick; }
 
+    void setVoiceMute(int v, bool m);
+    void setVoiceSolo(int v, bool s);
+    bool isVoiceSilenced(int v) const;
+
     void rebuild();
     void render(int16_t *out, int frames);
     void resetVoices();
@@ -35,10 +39,8 @@ private:
         int  basePitch = 60;
         double endTick   = 0.0;
         double startTick = 0.0;
-        int lastVolIdx = -1;
-        int lastPitchIdx = -1;
-        int lastDutyIdx = -1;
-        int lastArpIdx = -1;
+        int    lastVolIdx  = -1;
+        int    lastDutyIdx = -1;
         const VoiceParams *params = nullptr;
     };
 
@@ -57,4 +59,6 @@ private:
     float              m_masterVolume = 1.0f;
     QVector<FlatNote>  m_flatNotes;
     VoiceState         m_voices[3];
+    bool               m_mute[3] = {false, false, false};
+    bool               m_solo[3] = {false, false, false};
 };

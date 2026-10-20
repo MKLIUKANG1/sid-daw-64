@@ -38,8 +38,8 @@ private:
         int    basePitch = 60;
         double endTick   = 0.0;
         double startTick = 0.0;
-        int    lastVolIdx = -1;
-        int    lastDutyIdx = -1;
+        int    lastVolIdx  = -1;   // текущее значение volume (не индекс)
+        int    lastDutyIdx = -1;   // текущее значение pulse width
         const VoiceParams *params = nullptr;
     } m_voices[3];
 };

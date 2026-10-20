@@ -29,8 +29,32 @@ double ArrangementPlayer::noteFrequency(int midiPitch) const {
     return 440.0 * std::pow(2.0, (midiPitch - 69) / 12.0);
 }
 
+void ArrangementPlayer::setVoiceMute(int v, bool m) {
+    if (v < 0 || v > 2) return;
+    m_mute[v] = m;
+}
+
+void ArrangementPlayer::setVoiceSolo(int v, bool s) {
+    if (v < 0 || v > 2) return;
+    m_solo[v] = s;
+}
+
+bool ArrangementPlayer::isVoiceSilenced(int v) const {
+    if (v < 0 || v > 2) return false;
+    bool anySolo = m_solo[0] || m_solo[1] || m_solo[2];
+    if (anySolo) return !m_solo[v];
+    return m_mute[v];
+}
+
 void ArrangementPlayer::rebuild() {
     m_flatNotes.clear();
+        if (m_project) {
+        m_sid->setFilterEnabled(m_project->sidGlobal.filterEnabled);
+        m_sid->setFilterCutoff(m_project->sidGlobal.filterCutoff);
+        m_sid->setFilterResonance(m_project->sidGlobal.filterResonance);
+        m_sid->setFilterMode(m_project->sidGlobal.filterMode);
+        m_sid->setSidVolume(m_project->sidGlobal.masterVolume);
+    }
     if (!m_project) return;
 
     for (const auto &c : m_project->clips) {
@@ -82,6 +106,8 @@ void ArrangementPlayer::writeFrequency(int voice, int basePitch, double semitone
 
 void ArrangementPlayer::noteOn(const FlatNote &n) {
     int v = std::clamp(n.voice, 0, 2);
+    if (isVoiceSilenced(v)) return;
+
     int base = v * 7;
     const VoiceParams &vp = *n.params;
 
@@ -103,15 +129,21 @@ void ArrangementPlayer::noteOn(const FlatNote &n) {
     m_sid->write(base + 6, ((sus & 0x0F) << 4) | (vp.release & 0x0F));
     m_sid->write(base + 4, composeControl(vp, true));
 
+    if (m_project) {
+        m_sid->setFilterEnabled(m_project->sidGlobal.filterEnabled);
+        m_sid->setFilterCutoff(m_project->sidGlobal.filterCutoff);
+        m_sid->setFilterResonance(m_project->sidGlobal.filterResonance);
+        m_sid->setFilterMode(m_project->sidGlobal.filterMode);
+        m_sid->setSidVolume(m_project->sidGlobal.masterVolume);
+    }
+
     m_voices[v].active       = true;
     m_voices[v].pitch        = n.pitch;
     m_voices[v].basePitch    = n.pitch;
     m_voices[v].endTick      = n.tick + n.length;
     m_voices[v].startTick    = n.tick;
-    m_voices[v].lastVolIdx   = useEnv ? 0 : -1;
-    m_voices[v].lastPitchIdx = -1;
-    m_voices[v].lastDutyIdx  = -1;
-    m_voices[v].lastArpIdx   = -1;
+    m_voices[v].lastVolIdx   = useEnv ? sus : -1;
+    m_voices[v].lastDutyIdx  = vp.pulseWidth;
     m_voices[v].params       = n.params;
 }
 
@@ -130,60 +162,56 @@ void ArrangementPlayer::applyEnvelopes(double tick) {
         int speed = std::max(1, vp.envelopeSpeed);
         double elapsed = tick - m_voices[v].startTick;
         if (elapsed < 0) elapsed = 0;
-        int idx = int(elapsed * speed);
+        double pos = elapsed * speed;
+        int idx = int(pos);
+        double frac = pos - idx;
         int base = v * 7;
 
-        // ---- volume ----
+        auto sampleEnv = [&](const QVector<int> &env, int def) -> int {
+            if (env.isEmpty()) return def;
+            int i0 = std::clamp(idx, 0, int(env.size()) - 1);
+            int i1 = std::clamp(idx + 1, 0, int(env.size()) - 1);
+            double v0 = env[i0];
+            double v1 = env[i1];
+            return int(std::round(v0 + (v1 - v0) * frac));
+        };
+
         if (!vp.volumeEnvelope.isEmpty()) {
-            int vi = std::min(idx, int(vp.volumeEnvelope.size()) - 1);
-            if (vi >= 0 && vi != m_voices[v].lastVolIdx) {
-                m_voices[v].lastVolIdx = vi;
-                int vol = vp.volumeEnvelope[vi];
+            int vol = std::clamp(sampleEnv(vp.volumeEnvelope, 15), 0, 15);
+            if (vol != m_voices[v].lastVolIdx) {
+                m_voices[v].lastVolIdx = vol;
                 m_sid->write(base + 6, ((vol & 0x0F) << 4) | (vp.release & 0x0F));
             }
         }
 
-        // ---- pitch ----
         int pitchShift = 0;
         if (!vp.pitchEnvelope.isEmpty()) {
-            int pi = std::min(idx, int(vp.pitchEnvelope.size()) - 1);
-            if (pi >= 0) {
-                pitchShift = vp.pitchEnvelope[pi] - 8;   // center = 8
-            }
+            int ev = sampleEnv(vp.pitchEnvelope, vp.pitchEnvelopeAbsolute ? 0 : 8);
+            pitchShift = vp.pitchEnvelopeAbsolute ? ev : (ev - 8);
         }
-
-        // ---- arpeggio ----
         int arpShift = 0;
-        if (!vp.arpeggioEnvelope.isEmpty()) {
-            int ai = std::min(idx, int(vp.arpeggioEnvelope.size()) - 1);
-            if (ai >= 0) arpShift = vp.arpeggioEnvelope[ai];
-        }
+        if (!vp.arpeggioEnvelope.isEmpty())
+            arpShift = sampleEnv(vp.arpeggioEnvelope, 0);
 
-        // ---- duty ----
-        int dutyChanged = 0;
         if (!vp.dutyEnvelope.isEmpty()) {
-            int di = std::min(idx, int(vp.dutyEnvelope.size()) - 1);
-            if (di >= 0 && di != m_voices[v].lastDutyIdx) {
-                m_voices[v].lastDutyIdx = di;
-                int pw = vp.dutyEnvelope[di] * 273;   // 0..4095
-                if (pw < 0) pw = 0;
-                if (pw > 4095) pw = 4095;
+            int d = std::clamp(sampleEnv(vp.dutyEnvelope, 8), 0, 15);
+            int pw = std::clamp(d * 273, 0, 4095);
+            if (pw != m_voices[v].lastDutyIdx) {
+                m_voices[v].lastDutyIdx = pw;
                 m_sid->write(base + 2, pw & 0xFF);
                 m_sid->write(base + 3, (pw >> 8) & 0x0F);
-                dutyChanged = 1;
             }
         }
 
-        // ---- pitch+arpeggio → частота ----
-        if (pitchShift != 0 || arpShift != 0) {
+        if (pitchShift != 0 || arpShift != 0)
             writeFrequency(v, m_voices[v].basePitch, pitchShift + arpShift);
-        } else if (dutyChanged) {
-            // ничего не делаем — просто для читаемости
-        }
     }
 }
 
 void ArrangementPlayer::processUntil(double tick) {
+    for (int v = 0; v < 3; ++v)
+        if (m_voices[v].active && isVoiceSilenced(v)) noteOff(v);
+
     for (int v = 0; v < 3; ++v) {
         if (m_voices[v].active && tick >= m_voices[v].endTick) {
             bool stillScheduled = false;
@@ -208,9 +236,27 @@ void ArrangementPlayer::render(int16_t *out, int frames) {
     int offset = 0;
     while (offset < frames) {
         double nextTick = m_currentTick + ticksPerSample;
-        processUntil(nextTick);
+
+        // 1. Note-offs: всегда, даже если новая нота начинается сразу.
+        for (int v = 0; v < 3; ++v) {
+            if (m_voices[v].active &&
+                (isVoiceSilenced(v) || nextTick >= m_voices[v].endTick)) {
+                noteOff(v);
+            }
+        }
+
+        // 2. Один сэмпл SID — за ~22 цикла gate-off успевает зафиксироваться
         m_sid->clock(1, out + offset);
         out[offset] = int16_t(float(out[offset]) * m_masterVolume);
+
+        // 3. Note-ons
+        for (const auto &n : m_flatNotes) {
+            if (n.tick > m_currentTick && n.tick <= nextTick)
+                noteOn(n);
+        }
+
+        applyEnvelopes(nextTick);
+        m_currentTick = nextTick;
         ++offset;
     }
 }

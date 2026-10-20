@@ -24,6 +24,7 @@ QString VoicePresetIO::save(const VoiceParams &vp, const QString &path) {
     o["ringMod"] = vp.ringMod; o["sync"] = vp.sync;
     o["volume"] = double(vp.volume); o["pan"] = double(vp.pan);
     o["envelopeSpeed"] = vp.envelopeSpeed;
+    o["pitchEnvelopeAbsolute"] = vp.pitchEnvelopeAbsolute;
     o["volumeEnvelope"]   = vecToJson(vp.volumeEnvelope);
     o["pitchEnvelope"]    = vecToJson(vp.pitchEnvelope);
     o["dutyEnvelope"]     = vecToJson(vp.dutyEnvelope);
@@ -59,6 +60,7 @@ QString VoicePresetIO::load(VoiceParams &vp, const QString &path) {
     vp.volume = float(o.value("volume").toDouble(1.0));
     vp.pan = float(o.value("pan").toDouble(0.0));
     vp.envelopeSpeed = o.value("envelopeSpeed").toInt(4);
+    vp.pitchEnvelopeAbsolute = o.value("pitchEnvelopeAbsolute").toBool(false);
     vp.volumeEnvelope   = jsonToVec(o.value("volumeEnvelope").toArray());
     vp.pitchEnvelope    = jsonToVec(o.value("pitchEnvelope").toArray());
     vp.dutyEnvelope     = jsonToVec(o.value("dutyEnvelope").toArray());

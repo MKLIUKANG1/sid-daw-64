@@ -24,14 +24,12 @@ struct VoiceParams {
     bool sync       = false;
     float volume    = 1.0f;
     float pan       = 0.0f;
-
-    // Огибающие, 0..15
-    QVector<int> volumeEnvelope;      // default 15
-    QVector<int> pitchEnvelope;       // default 8 (center = 0 semitones)
-    QVector<int> dutyEnvelope;        // default 8 (center = PW 2048)
-    QVector<int> arpeggioEnvelope;    // default 0 (no shift)
-
+    QVector<int> volumeEnvelope;
+    QVector<int> pitchEnvelope;
+    QVector<int> dutyEnvelope;
+    QVector<int> arpeggioEnvelope;
     int envelopeSpeed = 4;
+    bool pitchEnvelopeAbsolute = false;
 };
 
 struct Instrument {
@@ -39,10 +37,22 @@ struct Instrument {
     VoiceParams params;
 };
 
+struct DrumSlot {
+    int     midiPitch = 36;
+    QString name = "Kick";
+    int     instrumentIndex = -1;
+};
+
+struct DrumKit {
+    QString name = "Drum Kit";
+    QList<DrumSlot> entries;
+};
+
 struct Pattern {
     QString     name = "Pattern 1";
     int         lengthTicks = 64;
     QVector<Note> notes;
+    bool isDrumPattern = false;
     VoiceParams voiceParams[3];
 };
 
@@ -53,10 +63,21 @@ struct Clip {
     int lengthTicks  = 64;
 };
 
+struct SidGlobal {
+    int  filterCutoff    = 1024;   // 0..2047
+    int  filterResonance = 8;      // 0..15
+    int  filterMode      = 0;      // 0=LP, 1=BP, 2=HP
+    bool filterEnabled   = true;
+    int  masterVolume    = 15;     // 0..15
+    int  filterVoices    = 0x07;   // битовая маска: бит 0=voice1, 1=voice2, 2=voice3
+};
+
 struct Project {
     std::vector<std::unique_ptr<Pattern>> patterns;
     std::vector<std::unique_ptr<Instrument>> instruments;
+    DrumKit drumKit;
     QVector<Clip> clips;
-    int trackCount = 4;
+    int trackCount = 8;
     int totalTicks = 256;
+    SidGlobal sidGlobal;
 };

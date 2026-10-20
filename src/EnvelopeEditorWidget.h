@@ -1,16 +1,17 @@
 #pragma once
 #include <QWidget>
 #include <QVector>
+#include <QPoint>
 
 class EnvelopeEditorWidget : public QWidget {
     Q_OBJECT
 public:
     explicit EnvelopeEditorWidget(QWidget *parent = nullptr);
 
-    void setEnvelope(QVector<int> *env,
-                     int maxValue,
-                     int defaultValue,
+    void setEnvelope(QVector<int> *env, int maxValue, int defaultValue,
                      bool showCenter = false);
+    void setEnvelopeType(int t) { m_envelopeType = t; }
+    void setPoints(const QVector<int> &points);
 
 signals:
     void envelopeChanged();
@@ -37,4 +38,7 @@ private:
     bool m_showCenter   = false;
     int  m_length       = 32;
     bool m_drawing      = false;
+    int  m_envelopeType = 0;      // 0=Vol, 1=Pitch, 2=Duty, 3=Arp
+    QPoint m_dragStart;
+    bool  m_dragPotential = false;
 };

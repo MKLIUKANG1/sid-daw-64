@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(SidDAW VERSION 0.2.0 LANGUAGES CXX)
+project(SidDAW VERSION 0.3.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -41,6 +41,8 @@ add_executable(SidDAW
     src/VoicePresetIO.h
     src/WavExporter.cpp
     src/WavExporter.h
+    src/MidiPresetManager.cpp
+    src/MidiPresetManager.h
     src/MidiImporter.cpp
     src/MidiImporter.h
     src/MidiImportDialog.cpp
@@ -49,8 +51,26 @@ add_executable(SidDAW
     src/MidiRecorder.h
     src/ProjectIO.cpp
     src/ProjectIO.h
+    src/Cpu6502.cpp
+    src/Cpu6502.h
+    src/RawSidStream.cpp
+    src/RawSidStream.h
+    src/RawSidDevice.cpp
+    src/RawSidDevice.h
+    src/SidImporter.cpp
+    src/SidImporter.h
     src/SidExporter.cpp
     src/SidExporter.h
+    src/WaveformPreview.cpp
+    src/WaveformPreview.h
+    src/EnvelopePresets.cpp
+    src/EnvelopePresets.h
+    src/InstrumentPresets.cpp
+    src/InstrumentPresets.h
+    src/InstrumentEditorPanel.cpp
+    src/InstrumentEditorPanel.h
+    src/PreviewPlayer.cpp
+    src/PreviewPlayer.h
     src/SidEngine.cpp
     src/SidEngine.h
     src/PatternPlayer.cpp
@@ -65,8 +85,16 @@ add_executable(SidDAW
     src/NotePropertiesDialog.h
     src/InstrumentListWidget.cpp
     src/InstrumentListWidget.h
+    src/ThemeManager.cpp
+    src/ThemeManager.h
     src/LanguageManager.cpp
     src/LanguageManager.h
+    src/DrumPresets.cpp
+    src/DrumPresets.h
+    src/DrumEditorWidget.cpp
+    src/DrumEditorWidget.h
+    src/DrumEditorDialog.cpp
+    src/DrumEditorDialog.h
     src/AboutDialog.cpp
     src/AboutDialog.h
     src/Model.h
